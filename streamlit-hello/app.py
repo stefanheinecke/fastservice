@@ -5,7 +5,7 @@ import altair as alt
 
 # Sample data setup
 baskets = {
-    "Basket A": {
+    "Portfolio A": {
         "values": [1.1, 2.3, 3.3],
         "timeseries": pd.DataFrame({
             "Date": pd.date_range(start="2023-01-01", periods=10),
@@ -16,7 +16,7 @@ baskets = {
             "2023-01-02": ["Orange", "Grapes"],
         }
     },
-    "Basket B": {
+    "Portfolio B": {
         "values": [4.4, 5.2],
         "timeseries": pd.DataFrame({
             "Date": pd.date_range(start="2023-01-01", periods=10),
@@ -30,12 +30,12 @@ baskets = {
 }
 
 # Sidebar selection
-selected_basket = st.sidebar.selectbox("Select a Basket", list(baskets.keys()))
+selected_basket = st.sidebar.selectbox("Select Portfolio", list(baskets.keys()))
 basket_data = baskets[selected_basket]
 
 # Display numeric values
-st.write(f"**Numeric Values for {selected_basket}:**")
-st.write(basket_data["values"])
+st.write(f"**Historic Values for {selected_basket}:**")
+st.table(pd.DataFrame({"Values": basket_data["values"]}))
 
 # Display time series chart
 ts = basket_data["timeseries"]
@@ -48,7 +48,12 @@ chart = alt.Chart(ts).mark_line().encode(
 st.altair_chart(chart, use_container_width=True)
 
 # Date click selection simulation
-selected_date = st.selectbox("Select a date to view components", ts["Date"].dt.strftime('%Y-%m-%d'))
+selected_date = st.date_input(
+    "Select a date to view components",
+    value=ts["Date"].iloc[0],
+    min_value=ts["Date"].min(),
+    max_value=ts["Date"].max()
+).strftime('%Y-%m-%d')
 components = basket_data["components"].get(selected_date, ["No data available for this date."])
 st.write(f"**Components for {selected_date}:**")
-st.write(components)
+st.table(pd.DataFrame({"Components": components}))
