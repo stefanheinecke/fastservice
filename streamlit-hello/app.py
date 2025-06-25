@@ -9,10 +9,11 @@ baskets = {
         "values": [1.1, 2.3, 3.3],
         "timeseries": pd.DataFrame({
             "Date": pd.date_range(start="2023-01-01", periods=10),
-            "Value": np.random.rand(10)*100
+            "Index Value": np.random.rand(10)*100
+            "Divisor": np.random.rand(10)*100
         }),
         "components": {
-            "2023-01-01": ["Apple", "Banana"],
+            "2023-01-01": ["AAPL", "Apple"],
             "2023-01-02": ["Orange", "Grapes"],
         }
     },
