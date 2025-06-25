@@ -26,7 +26,7 @@ jobs:
 
       - name: Build Docker image
         run: |
-          docker build -f streamlit-hello/Dockerfile streamlit-hello/ -t ${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/streamlit-hello:$GITHUB_SHA .
+          docker build -f streamlit-hello/Dockerfile streamlit-hello/ -t ${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/streamlit-hello:$GITHUB_SHA
 
       - name: Push Docker image to Artifact Registry
         run: |
