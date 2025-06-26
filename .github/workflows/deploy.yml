@@ -6,29 +6,19 @@ on:
       - main
 
 jobs:
-  checkout_code:
-    name: Checkout code
+  build:
+    name: Build and Push Docker Image
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-  authenticate:
-      name: Authenticate with Google Cloud
-      runs-on: ubuntu-latest
-
-      steps:
       - name: Authenticate with Google Cloud
         uses: google-github-actions/auth@v1
         with:
           credentials_json: '${{ secrets.GCP_SA_KEY }}'
-  
-  build_image:
-      name: Build and Push Docker Image
-      runs-on: ubuntu-latest
 
-      steps:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
         with:
