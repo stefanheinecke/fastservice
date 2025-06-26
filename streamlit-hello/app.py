@@ -9,8 +9,9 @@ baskets = {
         "values": [1.1, 2.3, 3.3],
         "timeseries": pd.DataFrame({
             "Date": pd.date_range(start="2023-01-01", periods=10),
-            "Index Value": np.random.rand(10)*100
-            "Divisor": np.random.rand(10)*100
+            "Value": np.random.rand(10)*100,
+            "Volume": np.random.randint(100, 200, 10),
+            "Category": np.random.choice(["Tech", "Finance", "Retail"], 10)
         }),
         "components": {
             "2023-01-01": ["AAPL", "Apple"],
@@ -21,7 +22,9 @@ baskets = {
         "values": [4.4, 5.2],
         "timeseries": pd.DataFrame({
             "Date": pd.date_range(start="2023-01-01", periods=10),
-            "Value": np.random.rand(10)*50
+            "Value": np.random.rand(10)*50,
+            "Volume": np.random.randint(50, 150, 10),
+            "Category": np.random.choice(["Food", "Beverage", "Other"], 10)
         }),
         "components": {
             "2023-01-01": ["Bread", "Butter"],
@@ -36,7 +39,8 @@ basket_data = baskets[selected_basket]
 
 # Display numeric values
 st.write(f"**Historic Values for {selected_basket}:**")
-st.table(pd.DataFrame({"Values": basket_data["values"]}))
+ts = basket_data["timeseries"]
+st.table(ts[["Date", "Value", "Volume", "Category"]])
 
 # Display time series chart
 ts = basket_data["timeseries"]
