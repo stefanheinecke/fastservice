@@ -39,8 +39,15 @@ basket_data = baskets[selected_basket]
 
 # Display numeric values
 st.write(f"**Historic Values for {selected_basket}:**")
-ts = basket_data["timeseries"]
-st.table(ts[["Date", "Value", "Volume", "Category"]])
+values = basket_data["values"]
+volumes = basket_data["timeseries"]["Volume"][:len(values)].tolist()
+categories = basket_data["timeseries"]["Category"][:len(values)].tolist()
+df = pd.DataFrame({
+    "Value": values,
+    "Volume": volumes,
+    "Category": categories
+})
+st.table(df)
 
 # Display time series chart
 ts = basket_data["timeseries"]
