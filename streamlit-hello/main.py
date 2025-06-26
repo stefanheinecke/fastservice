@@ -23,6 +23,10 @@ def launch_streamlit():
 def read_root():
     return {"message": "Success"}
 
+@app.get("/streamlit")
+def streamlit_redirect():
+    return RedirectResponse("http://localhost:8501/streamlit")
+
 @app.get("/")
 def root_redirect():
     return RedirectResponse("/api/status")
