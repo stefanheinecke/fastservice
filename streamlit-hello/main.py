@@ -9,6 +9,7 @@ app = FastAPI()
 @app.on_event("startup")
 def launch_streamlit():
     def run_streamlit():
+        # Launch Streamlit with logging output visible in Cloud Run logs
         subprocess.Popen([
             "streamlit", "run", "app.py",
             "--server.port=8501",
@@ -18,27 +19,29 @@ def launch_streamlit():
         ])
     threading.Thread(target=run_streamlit, daemon=True).start()
 
+# Health check endpoint (Cloud Run expects this to succeed quickly)
+@app.get("/")
+def health_check():
+    return {"status": "ok"}
+
 @app.get("/api/status")
 def status():
     return {"message": "Success"}
 
 @app.api_route("/streamlit/{path:path}", methods=["GET", "POST"])
 async def proxy_streamlit(request: Request, path: str):
-    client = httpx.AsyncClient()
-    url = f"http://localhost:8501/streamlit/{path}"
-    headers = dict(request.headers)
+    # Create a new HTTP client per request and close it properly
+    async with httpx.AsyncClient() as client:
+        url = f"http://localhost:8501/streamlit/{path}"
+        headers = dict(request.headers)
 
-    response = await client.request(
-        request.method, url,
-        headers=headers,
-        content=await request.body()
-    )
-    return StreamingResponse(
-        response.aiter_raw(),
-        status_code=response.status_code,
-        headers=dict(response.headers)
-    )
-
-@app.get("/")
-def redirect_root():
-    return RedirectResponse("/streamlit")
+        response = await client.request(
+            request.method, url,
+            headers=headers,
+            content=await request.body()
+        )
+        return StreamingResponse(
+            response.aiter_raw(),
+            status_code=response.status_code,
+            headers=dict(response.headers)
+        )
