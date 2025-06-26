@@ -47,4 +47,18 @@ def root():
 def status():
     return {"message": "Streamlit + FastAPI running"}
 
-@app.api_route("/streamlit/{path:path}",
+@app.api_route("/streamlit/{path:path}", methods=["GET", "POST"])
+async def proxy_streamlit(request: Request, path: str):
+    async with httpx.AsyncClient() as client:
+        url = f"http://localhost:8501/streamlit/{path}"
+        response = await client.request(
+            request.method,
+            url,
+            headers=dict(request.headers),
+            content=await request.body()
+        )
+        return StreamingResponse(
+            response.aiter_raw(),
+            status_code=response.status_code,
+            headers=dict(response.headers)
+        )
