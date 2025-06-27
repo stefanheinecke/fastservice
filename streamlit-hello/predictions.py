@@ -122,6 +122,18 @@ ax.set_title("Apple Stock Forecast")
 ax.legend()
 st.pyplot(fig)
 
+# 🧮 Display 5-Day Forecasted Prices
+st.subheader("🔮 Next 5-Day Forecast")
+future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=5, freq="B")
+forecast_df = pd.DataFrame({
+    "Date": future_dates,
+    "Predicted_Close": np.round(future_preds, 2)
+})
+st.dataframe(forecast_df, use_container_width=True)
+
+csv = forecast_df.to_csv(index=False).encode("utf-8")
+st.download_button("📥 Download CSV Report", data=csv, file_name="aapl_prediction_report.csv", mime="text/csv")
+
 # CSV export
 st.subheader("📁 Downloadable Prediction Report")
 report_df = pd.DataFrame({
@@ -132,6 +144,3 @@ report_df = pd.DataFrame({
     "Correct_Direction": ((np.diff(y_true) > 0) == (np.diff(y_pred) > 0)).astype(int)
 })
 st.dataframe(report_df.head(), use_container_width=True)
-
-csv = report_df.to_csv(index=False).encode("utf-8")
-st.download_button("📥 Download CSV Report", data=csv, file_name="aapl_prediction_report.csv", mime="text/csv")
