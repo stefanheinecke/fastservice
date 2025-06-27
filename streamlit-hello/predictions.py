@@ -32,6 +32,8 @@ def load_data():
     return df.dropna()
 
 df = load_data()
+df.index = pd.to_datetime(df.index)
+df["Date"] = df.index.date
 st.subheader("📈 Historical Data Preview")
 st.dataframe(df.tail(10), use_container_width=True)
 
@@ -133,14 +135,3 @@ st.dataframe(forecast_df, use_container_width=True)
 
 csv = forecast_df.to_csv(index=False).encode("utf-8")
 st.download_button("📥 Download CSV Report", data=csv, file_name="aapl_prediction_report.csv", mime="text/csv")
-
-# CSV export
-st.subheader("📁 Downloadable Prediction Report")
-report_df = pd.DataFrame({
-    "Actual_Close": y_true[1:],
-    "Predicted_Close": y_pred[1:],
-    "Absolute_Error": np.abs(y_true[1:] - y_pred[1:]),
-    "Percentage_Error": np.abs((y_true[1:] - y_pred[1:]) / y_true[1:]) * 100,
-    "Correct_Direction": ((np.diff(y_true) > 0) == (np.diff(y_pred) > 0)).astype(int)
-})
-st.dataframe(report_df.head(), use_container_width=True)
