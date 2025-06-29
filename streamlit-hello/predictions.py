@@ -18,13 +18,14 @@ np.random.seed(SEED)
 tf.random.set_seed(SEED)
 os.environ['PYTHONHASHSEED'] = str(SEED)
 
-st.set_page_config(page_title="AAPL Forecast", layout="wide")
-st.title("📊 Apple (AAPL) Stock Prediction with Deep Learning")
+st.set_page_config(page_title="SX5E Forecast", layout="wide")
+st.title("📊 EURO STOXX 50 (SX5E) Stock Prediction with Deep Learning")
 
 # Load data
 @st.cache_data
 def load_data():
-    df = yf.Ticker("AAPL").history(period="5y")[["Open", "High", "Low", "Close", "Volume"]]
+    # For EURO STOXX 50, use the ticker symbol "^STOXX50E"
+    df = yf.Ticker("^STOXX50E").history(period="5y")[["Open", "High", "Low", "Close", "Volume"]]
     df = ta.add_all_ta_features(
         df,
         open="Open", high="High", low="Low", close="Close", volume="Volume",
@@ -120,7 +121,7 @@ fig, ax = plt.subplots(figsize=(10, 5))
 ax.plot(actual, label="Actual", color="black")
 ax.plot(preds, label="Predicted", color="orange")
 ax.plot(range(len(actual), len(actual) + 5), future_preds, linestyle="--", marker="o", label="Forecast", color="blue")
-ax.set_title("Apple Stock Forecast")
+ax.set_title("EURO STOXX 50 (SX5E) Stock Forecast")
 ax.legend()
 st.pyplot(fig)
 
@@ -134,4 +135,4 @@ forecast_df = pd.DataFrame({
 st.dataframe(forecast_df, use_container_width=True)
 
 csv = forecast_df.to_csv(index=False).encode("utf-8")
-st.download_button("📥 Download CSV Report", data=csv, file_name="aapl_prediction_report.csv", mime="text/csv")
+st.download_button("📥 Download CSV Report", data=csv, file_name="sx5e_prediction_report.csv", mime="text/csv")
