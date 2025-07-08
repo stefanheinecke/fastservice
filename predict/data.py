@@ -122,6 +122,8 @@ def store_predictions(forecast_df):
 
     # Ensure only Date and Predicted_Close columns are present
     forecast_df = forecast_df[["Date", "Predicted_Close"]]
+    # Ensure Date column is of datetime.date type
+    forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.date
 
     client = bigquery.Client(project=project_id)
     table_ref = f"{project_id}.{dataset_id}.{table_id}"
