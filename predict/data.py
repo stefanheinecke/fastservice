@@ -120,13 +120,18 @@ def store_predictions(forecast_df):
     dataset_id = "predict_data"
     table_id = "prediction"
 
+    print(f"forecast_df 1:\n{forecast_df}")
     # Ensure only Date and Predicted_Close columns are present
     forecast_df = forecast_df[["Date", "Predicted_Close"]]
+    print(f"forecast_df 2:\n{forecast_df}")
     # Ensure Date column is of datetime.date type
     forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.date
+    print(f"forecast_df 3:\n{forecast_df}")
 
     client = bigquery.Client(project=project_id)
+    print(f"BigQuery client created for project: {project_id}")
     table_ref = f"{project_id}.{dataset_id}.{table_id}"
+    print(f"Table reference: {table_ref}")
 
     job = client.load_table_from_dataframe(
         forecast_df,
@@ -139,4 +144,6 @@ def store_predictions(forecast_df):
             ]
         )
     )
+    print(f"Job started: {job.job_id}")
     job.result()
+    print(f"Job completed: {job.job_id}")
