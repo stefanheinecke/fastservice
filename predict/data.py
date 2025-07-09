@@ -125,18 +125,24 @@ def store_predictions(forecast_df):
     dataset_id = "predict_data"
     table_id = "prediction"
 
+    print("Step 1")
+
     query = f"""
         SELECT Date, Created_at, Symbol
         FROM `{project_id}.{dataset_id}.{table_id}`
         """
+    client = bigquery.Client(project=project_id)
     existing = client.query(query).to_dataframe()
 
+    print("Step 2")
 
     # Ensure only Date and Predicted_Close columns are present
     forecast_df = forecast_df[["Created_at", "Symbol", "Date", "Predicted_Close"]]
     # Ensure Date column is of datetime.date type
     forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.date
     forecast_df["Created_at"] = pd.to_datetime(forecast_df["Created_at"]).dt.date
+
+    print("Step 3")
 
     # Merge and find new records
     merged = forecast_df.merge(
@@ -146,10 +152,13 @@ def store_predictions(forecast_df):
         indicator=True
     )
 
+    print("Step 4")
+
     new_rows = merged[merged["_merge"] == "left_only"].drop(columns=["_merge"])
 
+    print("Step 5")
+
     if not new_rows.empty:
-        client = bigquery.Client(project=project_id)
         table_ref = f"{project_id}.{dataset_id}.{table_id}"
         job = client.load_table_from_dataframe(
             forecast_df,
