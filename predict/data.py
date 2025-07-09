@@ -115,10 +115,9 @@ def create_predictions(symbol):
     })
     forecast_df["Symbol"] = symbol
     forecast_df["Created_at"] = pd.Timestamp.today().date()
-    return forecast_df
+    return forecast_df, df
 
-def store_predictions(forecast_df):
-
+def store_predictions(forecast_df, df):
     print("Storing predictions in BigQuery...")
 
     project_id = "my-sh-project-398715"
@@ -167,3 +166,33 @@ def store_predictions(forecast_df):
         print(f"Job completed: {job.job_id}")
     else:
         print("No new records to insert.")
+
+    # --- Update Real_Close column for matching dates ---
+    print("Updating Real_Close values in BigQuery...")
+
+    # Prepare a DataFrame with Date and Real_Close from df
+    real_close_df = pd.DataFrame({
+        "Date": pd.to_datetime(df.index).date,
+        "Real_Close": df["Close"].values
+    })
+
+    # For each date, update Real_Close in BigQuery
+    for _, row in real_close_df.iterrows():
+        date_val = row["Date"]
+        real_close_val = float(row["Real_Close"])
+        update_query = f"""
+            UPDATE `{project_id}.{dataset_id}.{table_id}`
+            SET Real_Close = @real_close
+            WHERE Date = @date
+        """
+        job = client.query(
+            update_query,
+            job_config=bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("real_close", "FLOAT", real_close_val),
+                    bigquery.ScalarQueryParameter("date", "DATE", date_val),
+                ]
+            ),
+        )
+        job.result()
+    print("Real_Close column updated for matching dates.")
