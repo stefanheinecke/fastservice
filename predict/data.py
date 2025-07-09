@@ -141,6 +141,8 @@ def store_predictions(forecast_df):
         job_config=bigquery.LoadJobConfig(
             write_disposition="WRITE_APPEND",
             schema=[
+                bigquery.SchemaField("Created_at", "DATE"),
+                bigquery.SchemaField("Symbol", "STRING"),
                 bigquery.SchemaField("Date", "DATE"),
                 bigquery.SchemaField("Predicted_Close", "FLOAT"),
             ]
