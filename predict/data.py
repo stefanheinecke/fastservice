@@ -64,11 +64,14 @@ def create_predictions(symbol):
     X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=SEED)
 
     # Model
+    initializer = tf.keras.initializers.GlorotUniform(seed=SEED)
+
     model = tf.keras.models.Sequential([
-        tf.keras.layers.Dense(256, activation="relu", input_shape=(X.shape[1],)),
-        tf.keras.layers.Dense(128, activation="relu"),
-        tf.keras.layers.Dense(1)
+        tf.keras.layers.Dense(256, activation="relu", kernel_initializer=initializer, input_shape=(X.shape[1],)),
+        tf.keras.layers.Dense(128, activation="relu", kernel_initializer=initializer),
+        tf.keras.layers.Dense(1, kernel_initializer=initializer)
     ])
+
     model.compile(optimizer="adam", loss="mse", metrics=["mae"])
     model.fit(X_train, y_train, epochs=10, batch_size=16, verbose=0)
 
