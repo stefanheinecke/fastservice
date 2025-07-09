@@ -176,6 +176,8 @@ def store_predictions(forecast_df, df):
         "Real_Close": df["Close"].values
     })
 
+    print(f"real_close_df:\n{real_close_df}")
+
     # For each date, update Real_Close in BigQuery
     for _, row in real_close_df.iterrows():
         date_val = row["Date"]
@@ -185,12 +187,13 @@ def store_predictions(forecast_df, df):
             SET Real_Close = @real_close
             WHERE Date = @date
         """
+        print(f"update_query:\n{update_query}")
         job = client.query(
             update_query,
             job_config=bigquery.QueryJobConfig(
                 query_parameters=[
-                    bigquery.ScalarQueryParameter("real_close", "FLOAT", real_close_val),
-                    bigquery.ScalarQueryParameter("date", "DATE", date_val),
+                    bigquery.ScalarQueryParameter("Real_Close", "FLOAT", real_close_val),
+                    bigquery.ScalarQueryParameter("Date", "DATE", date_val),
                 ]
             ),
         )
