@@ -125,32 +125,46 @@ def store_predictions(forecast_df):
     dataset_id = "predict_data"
     table_id = "prediction"
 
-    print(f"forecast_df 1:\n{forecast_df}")
+    query = f"""
+        SELECT Date, Created_at, Symbol
+        FROM `{project_id}.{dataset_id}.{table_id}`
+        """
+    existing = client.query(query).to_dataframe()
+
+
     # Ensure only Date and Predicted_Close columns are present
     forecast_df = forecast_df[["Created_at", "Symbol", "Date", "Predicted_Close"]]
-    print(f"forecast_df 2:\n{forecast_df}")
     # Ensure Date column is of datetime.date type
     forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.date
-    print(f"forecast_df 3:\n{forecast_df}")
+    forecast_df["Created_at"] = pd.to_datetime(forecast_df["Created_at"]).dt.date
 
-    client = bigquery.Client(project=project_id)
-    print(f"BigQuery client created for project: {project_id}")
-    table_ref = f"{project_id}.{dataset_id}.{table_id}"
-    print(f"Table reference: {table_ref}")
-
-    job = client.load_table_from_dataframe(
-        forecast_df,
-        table_ref,
-        job_config=bigquery.LoadJobConfig(
-            write_disposition="WRITE_APPEND",
-            schema=[
-                bigquery.SchemaField("Created_at", "DATE"),
-                bigquery.SchemaField("Symbol", "STRING"),
-                bigquery.SchemaField("Date", "DATE"),
-                bigquery.SchemaField("Predicted_Close", "FLOAT"),
-            ]
-        )
+    # Merge and find new records
+    merged = forecast_df.merge(
+        existing,
+        on=["Date", "Created_at", "Symbol"],
+        how="left",
+        indicator=True
     )
-    print(f"Job started: {job.job_id}")
-    job.result()
-    print(f"Job completed: {job.job_id}")
+
+    new_rows = merged[merged["_merge"] == "left_only"].drop(columns=["_merge"])
+
+    if not new_rows.empty:
+        client = bigquery.Client(project=project_id)
+        table_ref = f"{project_id}.{dataset_id}.{table_id}"
+        job = client.load_table_from_dataframe(
+            forecast_df,
+            table_ref,
+            job_config=bigquery.LoadJobConfig(
+                write_disposition="WRITE_APPEND",
+                schema=[
+                    bigquery.SchemaField("Created_at", "DATE"),
+                    bigquery.SchemaField("Symbol", "STRING"),
+                    bigquery.SchemaField("Date", "DATE"),
+                    bigquery.SchemaField("Predicted_Close", "FLOAT"),
+                ]
+            )
+        )
+        job.result()
+        print(f"Job completed: {job.job_id}")
+    else:
+        print("No new records to insert.")
