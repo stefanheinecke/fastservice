@@ -179,23 +179,36 @@ def store_predictions(forecast_df, df):
     print(f"real_close_df:\n{real_close_df}")
 
     # For each date, update Real_Close in BigQuery
-    for _, row in real_close_df.iterrows():
-        date_val = row["Date"]
-        real_close_val = float(row["Real_Close"])
-        update_query = f"""
-            UPDATE `{project_id}.{dataset_id}.{table_id}`
-            SET Real_Close = @real_close
-            WHERE Date = @date
-        """
-        print(f"update_query:\n{update_query}")
-        job = client.query(
-            update_query,
-            job_config=bigquery.QueryJobConfig(
-                query_parameters=[
-                    bigquery.ScalarQueryParameter("Real_Close", "FLOAT", real_close_val),
-                    bigquery.ScalarQueryParameter("Date", "DATE", date_val),
-                ]
-            ),
+    # Batch update Real_Close using a temporary table and MERGE statement for efficiency
+
+    # Prepare DataFrame for upload
+    real_close_df["Date"] = pd.to_datetime(real_close_df["Date"])
+    temp_table_id = f"{dataset_id}.temp_real_close_update"
+    # Upload to temporary table
+    job = client.load_table_from_dataframe(
+        real_close_df,
+        f"{project_id}.{temp_table_id}",
+        job_config=bigquery.LoadJobConfig(
+            write_disposition="WRITE_TRUNCATE",
+            schema=[
+                bigquery.SchemaField("Date", "DATE"),
+                bigquery.SchemaField("Real_Close", "FLOAT"),
+            ]
         )
-        job.result()
+    )
+    job.result()
+
+    # Use MERGE to update Real_Close in one query
+    merge_query = f"""
+        MERGE `{project_id}.{dataset_id}.{table_id}` T
+        USING `{project_id}.{temp_table_id}` S
+        ON T.Date = S.Date
+        WHEN MATCHED THEN
+          UPDATE SET T.Real_Close = S.Real_Close
+    """
+    merge_job = client.query(merge_query)
+    merge_job.result()
+
+    # Optionally, delete the temp table
+    client.delete_table(f"{project_id}.{temp_table_id}", not_found_ok=True)
     print("Real_Close column updated for matching dates.")
