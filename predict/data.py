@@ -110,6 +110,8 @@ def create_predictions(symbol):
         "Date": future_dates,
         "Predicted_Close": np.round(future_preds, 2)
     })
+    forecast_df["Symbol"] = symbol
+    forecast_df["Created_at"] = pd.Timestamp.today().date()
     return forecast_df
 
 def store_predictions(forecast_df):
@@ -122,7 +124,7 @@ def store_predictions(forecast_df):
 
     print(f"forecast_df 1:\n{forecast_df}")
     # Ensure only Date and Predicted_Close columns are present
-    forecast_df = forecast_df[["Date", "Predicted_Close"]]
+    forecast_df = forecast_df[["Created_at", "Symbol", "Date", "Predicted_Close"]]
     print(f"forecast_df 2:\n{forecast_df}")
     # Ensure Date column is of datetime.date type
     forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.date
