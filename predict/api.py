@@ -37,3 +37,11 @@ def store_predictions(symbol: str = Query(...)):
     predict_obj.update_with_real_close(df)
 
     return JSONResponse(content={"message": "Predictions stored successfully."})
+
+@app.get("/dashboard")
+def prediction_history(
+    symbol: str = Query(...),
+    date: str = Query(...)  # Format: YYYY-MM-DD
+):
+    df = Predictor.fetch_prediction_history(symbol, date)
+    return JSONResponse(content={"data": df.to_dict(orient="records")})

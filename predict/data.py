@@ -216,3 +216,19 @@ class Predictor:
         # Optionally, delete the temp table
         self.client.delete_table(f"{self.project_id}.{temp_table_id}", not_found_ok=True)
         print("Real_Close column updated for matching dates.")
+
+    def fetch_prediction_history(self, target_date):
+        query = f"""
+            SELECT Created_at, Predicted_Close, Real_Close
+            FROM `{self.project_id}.{self.dataset_id}.{self.table_id}`
+            WHERE Symbol = {self.symbol} AND Date = @target_date
+            ORDER BY Created_at
+        """
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter("Symbol", "STRING", self.symbol),
+                bigquery.ScalarQueryParameter("Date", "DATE", target_date)
+            ]
+        )
+        df = self.client.query(query, job_config=job_config).to_dataframe()
+        return df
