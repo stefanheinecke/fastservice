@@ -34,7 +34,6 @@ def store_predictions(symbol: str = Query(...)):
     predict_obj.store_predictions(forecast_df)
     print(f"Stored Predictions for {symbol} in BigQuery.")
 
-    real_close_df = df[["Date", "Close"]].copy()
-    predict_obj.update_with_real_close(real_close_df)
+    predict_obj.update_with_real_close(df)
 
     return JSONResponse(content={"message": "Predictions stored successfully."})
