@@ -221,7 +221,7 @@ class Predictor:
         query = f"""
             SELECT Created_at, Predicted_Close, Real_Close
             FROM `{self.project_id}.{self.dataset_id}.{self.table_id}`
-            WHERE Symbol = {self.symbol} AND Date = @target_date
+            WHERE Symbol = `{self.symbol}` AND Date = @target_date
             ORDER BY Created_at
         """
         job_config = bigquery.QueryJobConfig(
