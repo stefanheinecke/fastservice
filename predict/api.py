@@ -1,4 +1,5 @@
 import data
+import pandas as pd
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 from data import Predictor
@@ -46,4 +47,5 @@ def prediction_history(
     predict_obj = Predictor("my-sh-project-398715", "predict_data", "prediction", symbol)
     df = predict_obj.fetch_prediction_history(date)
     df["Created_at"] = df["Created_at"].astype(str)
+    df["Real_Close"] = df["Real_Close"].apply(lambda x: "NaN" if pd.isna(x) else x)
     return JSONResponse(content={"data": df.to_dict(orient="records")})
