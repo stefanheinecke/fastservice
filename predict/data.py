@@ -221,14 +221,17 @@ class Predictor:
         query = f"""
             SELECT Created_at, Predicted_Close, Real_Close
             FROM `{self.project_id}.{self.dataset_id}.{self.table_id}`
-            WHERE Symbol = `{self.symbol}` AND Date = @target_date
+            WHERE Symbol = @Symbol AND Date = @Date
             ORDER BY Created_at
         """
+        print(f"Executing query: {query}")
         job_config = bigquery.QueryJobConfig(
             query_parameters=[
                 bigquery.ScalarQueryParameter("Symbol", "STRING", self.symbol),
                 bigquery.ScalarQueryParameter("Date", "DATE", target_date)
             ]
         )
+        print(f"Query Job Config: {job_config}")
         df = self.client.query(query, job_config=job_config).to_dataframe()
+        print(f"Fetched prediction history for {self.symbol} on {target_date}:\n{df}")
         return df
