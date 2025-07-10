@@ -45,7 +45,5 @@ def prediction_history(
 ):
     predict_obj = Predictor("my-sh-project-398715", "predict_data", "prediction", symbol)
     df = predict_obj.fetch_prediction_history(date)
-    # Convert date/datetime columns to string for JSON serialization
-    for col in df.select_dtypes(include=["datetime", "datetimetz"]).columns:
-        df[col] = df[col].astype(str)
+    df["Created_at"] = df["Created_at"].astype(str)
     return JSONResponse(content={"data": df.to_dict(orient="records")})
