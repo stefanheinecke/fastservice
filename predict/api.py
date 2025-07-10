@@ -1,10 +1,11 @@
 import data
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
+from data import Predictor
 
 app = FastAPI()
 
-@app.get("/sum")
+@app.get("/hello_sum")
 def sum_numbers(a: float = Query(...), b: float = Query(...)):
     result = a + b
     return JSONResponse(content={"sum": result})
@@ -23,10 +24,17 @@ def get_predictions(symbol: str = Query(...)):
 
 @app.get("/store_predictions")
 def store_predictions(symbol: str = Query(...)):
+
+    predict_obj = Predictor("my-sh-project-398715", "predict_data", "prediction", symbol)
     print(f"Storing predictions for {symbol}...")
-    # Create predictions and store them in BigQuery
-    forecast_df, df = data.create_predictions(symbol)
+
+    forecast_df, df = predict_obj.create_predictions()
     print(f"Forecast DataFrame for {symbol}:\n{forecast_df}")
-    # Ensure the DataFrame has the correct columns
-    data.store_predictions(forecast_df, df)
+
+    predict_obj.store_predictions(forecast_df)
+    print(f"Forecast DataFrame for {symbol}:\n{forecast_df}")
+
+    real_close_df = df[["Date", "Real_Close"]].copy()
+    predict_obj.update_with_real_close(real_close_df)
+
     return JSONResponse(content={"message": "Predictions stored successfully."})
