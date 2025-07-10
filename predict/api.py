@@ -43,5 +43,6 @@ def prediction_history(
     symbol: str = Query(...),
     date: str = Query(...)  # Format: YYYY-MM-DD
 ):
-    df = Predictor.fetch_prediction_history(symbol, date)
+    predict_obj = Predictor("my-sh-project-398715", "predict_data", "prediction", symbol)
+    df = predict_obj.fetch_prediction_history(date)
     return JSONResponse(content={"data": df.to_dict(orient="records")})
