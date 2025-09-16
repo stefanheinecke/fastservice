@@ -58,5 +58,13 @@ jobs:
           gcloud run deploy my-python-app \
             --image=${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/predict:$GITHUB_SHA \
             --platform=managed \
+            --command "uvicorn api:app --host 0.0.0.0 --port 8080" \
+            --region=${{ secrets.GCP_REGION }} \
+            --allow-unauthenticated
+
+          gcloud run deploy streamlit-service \
+            --image=${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/predict:$GITHUB_SHA \ \
+            --platform=managed \
+            --command "streamlit run predictions.py --server.port=8080 --server.address=0.0.0.0" \
             --region=${{ secrets.GCP_REGION }} \
             --allow-unauthenticated
