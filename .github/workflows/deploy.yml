@@ -59,4 +59,5 @@ jobs:
             --image=${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/api:$GITHUB_SHA \
             --platform=managed \
             --region=${{ secrets.GCP_REGION }} \
+            --memory=1Gi \
             --allow-unauthenticated
