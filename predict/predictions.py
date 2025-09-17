@@ -20,7 +20,7 @@ tf.random.set_seed(SEED)
 os.environ['PYTHONHASHSEED'] = str(SEED)
 
 st.set_page_config(page_title="SX5E Forecast", layout="wide")
-st.title("📊 EURO STOXX 50 (SX5E) Stock Prediction with Deep Learning")
+st.title("EURO STOXX 50 (SX5E) Stock Prediction with Deep Learning")
 
 # Load data
 @st.cache_data
@@ -36,7 +36,7 @@ def load_data():
 df = load_data()
 df.index = pd.to_datetime(df.index).date
 df["Date"] = df.index
-st.subheader("📈 Historical Data Preview")
+st.subheader("Historical Data Preview")
 st.dataframe(df.tail(10), use_container_width=True)
 
 # Feature setup
@@ -88,7 +88,7 @@ rmse = np.sqrt(mean_squared_error(y_true, y_pred))
 mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
 direction_acc = np.mean((np.diff(y_true) > 0) == (np.diff(y_pred) > 0))
 
-st.subheader("📊 Model Evaluation")
+st.subheader("Model Evaluation")
 st.metric("Mean Absolute Error (MAE)", f"${real_mae:.2f}")
 st.metric("Root Mean Squared Error (RMSE)", f"${rmse:.2f}")
 st.metric("Mean Absolute Percentage Error (MAPE)", f"{mape:.2f}%")
@@ -117,7 +117,7 @@ for _ in range(5):
     latest_window = np.vstack((latest_window[1:], last_day.values))
 
 # Plot
-st.subheader("📈 Actual vs. Predicted & 5-Day Forecast")
+st.subheader("Actual vs. Predicted & 5-Day Forecast")
 fig, ax = plt.subplots(figsize=(10, 5))
 ax.plot(actual, label="Actual", color="black")
 ax.plot(preds, label="Predicted", color="orange")
@@ -126,8 +126,8 @@ ax.set_title("EURO STOXX 50 (SX5E) Stock Forecast")
 ax.legend()
 st.pyplot(fig)
 
-# 🧮 Display 5-Day Forecasted Prices
-st.subheader("🔮 Next 5-Day Forecast")
+# Display 5-Day Forecasted Prices
+st.subheader("Next 5-Day Forecast")
 future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=5, freq="B").strftime("%Y-%m-%d")
 forecast_df = pd.DataFrame({
     "Date": future_dates,
