@@ -11,6 +11,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
 from google.cloud import bigquery
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
 # Fix randomness
 SEED = 42
@@ -126,8 +127,7 @@ ax.set_title("EURO STOXX 50 (SX5E) Stock Forecast")
 ax.legend()
 st.pyplot(fig)
 
-import plotly.graph_objects as go
-
+# Plotly
 fig = go.Figure()
 fig.add_trace(go.Scatter(y=actual, name="Actual", line=dict(color="black")))
 fig.add_trace(go.Scatter(y=preds, name="Predicted", line=dict(color="orange")))
@@ -174,3 +174,25 @@ st.success("Forecast uploaded to BigQuery!")
 
 csv = forecast_df.to_csv(index=False).encode("utf-8")
 st.download_button("📥 Download CSV Report", data=csv, file_name="sx5e_prediction_report.csv", mime="text/csv")
+
+# Evaluation Table: Actual vs Predicted
+st.subheader("Actual vs. Predicted Table")
+
+# Get the last 30 dates
+dates = df.index[-30:]
+
+# Calculate deviation and direction correctness
+deviation_pct = ((preds - actual) / actual) * 100
+direction_correct = np.sign(np.diff(actual)) == np.sign(np.diff(preds))
+direction_correct = np.insert(direction_correct, 0, np.nan)  # First row has no previous comparison
+
+# Build DataFrame
+eval_df = pd.DataFrame({
+    "Date": dates,
+    "Actual_Close": np.round(actual, 2),
+    "Predicted_Close": np.round(preds, 2),
+    "Deviation (%)": np.round(deviation_pct, 2),
+    "Correct Direction": direction_correct
+})
+
+st.dataframe(eval_df, use_container_width=True)
