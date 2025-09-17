@@ -37,7 +37,7 @@ df = load_data()
 df.index = pd.to_datetime(df.index).date
 df["Date"] = df.index
 st.subheader("📈 Historical Data Preview")
-st.dataframe(df.tail(10), width='stretch')
+st.dataframe(df.tail(10), use_container_width=True
 
 # Feature setup
 feature_cols = [
@@ -133,7 +133,7 @@ forecast_df = pd.DataFrame({
     "Date": future_dates,
     "Predicted_Close": np.round(future_preds, 2)
 })
-st.dataframe(forecast_df, width='stretch')
+st.dataframe(forecast_df, use_container_width=True)
 
 # Store forecast_df in BigQuery
 
