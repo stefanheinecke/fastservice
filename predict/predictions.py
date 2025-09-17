@@ -118,7 +118,7 @@ for _ in range(5):
 
 # Plot
 st.subheader("Actual vs. Predicted & 5-Day Forecast")
-fig, ax = plt.subplots(figsize=(10, 5))
+fig, ax = plt.subplots(figsize=(6, 3))
 ax.plot(actual, label="Actual", color="black")
 ax.plot(preds, label="Predicted", color="orange")
 ax.plot(range(len(actual), len(actual) + 5), future_preds, linestyle="--", marker="o", label="Forecast", color="blue")
