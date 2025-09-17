@@ -28,14 +28,23 @@ jobs:
         run: |
           gcloud auth configure-docker ${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev
 
-      - name: Build Docker image
+      - name: Build API image
         run: |
-          docker build -f predict/Dockerfile predict/ \
-            -t ${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/predict:$GITHUB_SHA
+          docker build -f predict/Dockerfile.api predict/ \
+            -t ${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/api:$GITHUB_SHA
 
       - name: Push Docker image to Artifact Registry
         run: |
-          docker push ${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/predict:$GITHUB_SHA
+          docker push ${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/api:$GITHUB_SHA
+
+      - name: Build Streamlit image
+        run: |
+          docker build -f predict/Dockerfile.streamlit predict/ \
+            -t ${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/streamlit:$GITHUB_SHA
+
+      - name: Push Streamlit image to Artifact Registry
+        run: |
+          docker push ${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/streamlit:$GITHUB_SHA
 
   deploy:
     name: Deploy to Cloud Run
@@ -55,16 +64,14 @@ jobs:
 
       - name: Deploy to Cloud Run
         run: |
-          gcloud run deploy my-python-app \
-            --image=${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/predict:$GITHUB_SHA \
+          gcloud run deploy api-service \
+            --image=${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/api:$GITHUB_SHA \
             --platform=managed \
-            --command "uvicorn api:app --host 0.0.0.0 --port 8080" \
             --region=${{ secrets.GCP_REGION }} \
             --allow-unauthenticated
 
           # gcloud run deploy streamlit-service \
-          #   --image=${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/predict:$GITHUB_SHA \ \
+          #   --image=${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/streamlit:$GITHUB_SHA \ \
           #   --platform=managed \
-          #   --command "streamlit run predictions.py --server.port=8080 --server.address=0.0.0.0" \
           #   --region=${{ secrets.GCP_REGION }} \
           #   --allow-unauthenticated
