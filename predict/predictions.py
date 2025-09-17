@@ -118,13 +118,28 @@ for _ in range(5):
 
 # Plot
 st.subheader("Actual vs. Predicted & 5-Day Forecast")
-fig, ax = plt.subplots(figsize=(6, 3))
+fig, ax = plt.subplots(figsize=(10, 5))
 ax.plot(actual, label="Actual", color="black")
 ax.plot(preds, label="Predicted", color="orange")
 ax.plot(range(len(actual), len(actual) + 5), future_preds, linestyle="--", marker="o", label="Forecast", color="blue")
 ax.set_title("EURO STOXX 50 (SX5E) Stock Forecast")
 ax.legend()
 st.pyplot(fig)
+
+import plotly.graph_objects as go
+
+fig = go.Figure()
+fig.add_trace(go.Scatter(y=actual, name="Actual", line=dict(color="black")))
+fig.add_trace(go.Scatter(y=preds, name="Predicted", line=dict(color="orange")))
+fig.add_trace(go.Scatter(
+    x=list(range(len(actual), len(actual) + 5)),
+    y=future_preds,
+    name="Forecast",
+    line=dict(color="blue", dash="dash"),
+    mode="lines+markers"
+))
+fig.update_layout(title="EURO STOXX 50 (SX5E) Stock Forecast")
+st.plotly_chart(fig, use_container_width=True)
 
 # Display 5-Day Forecasted Prices
 st.subheader("Next 5-Day Forecast")

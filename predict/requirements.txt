@@ -4,6 +4,7 @@ uvicorn
 httpx
 tensorflow
 ta
+plotly
 yfinance
 matplotlib
 scikit-learn
