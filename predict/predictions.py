@@ -37,7 +37,7 @@ df = load_data()
 df.index = pd.to_datetime(df.index).date
 df["Date"] = df.index
 st.subheader("📈 Historical Data Preview")
-st.dataframe(df.tail(10), use_container_width=True
+st.dataframe(df.tail(10), use_container_width=True)
 
 # Feature setup
 feature_cols = [
