@@ -37,6 +37,16 @@ jobs:
         run: |
           docker push ${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/api:$GITHUB_SHA
 
+      - name: Build Streamlit image
+        run: |
+          docker build -f predict/Dockerfile.streamlit predict/ \
+            -t ${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/streamlit:$GITHUB_SHA
+
+      - name: Push Docker image to Artifact Registry
+        run: |
+          docker push ${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/streamlit:$GITHUB_SHA
+
+
   deploy:
     name: Deploy to Cloud Run
     needs: build
@@ -61,3 +71,10 @@ jobs:
             --region=${{ secrets.GCP_REGION }} \
             --memory=1Gi \
             --allow-unauthenticated
+          
+          gcloud run deploy streamlit-service \
+            --image=${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/streamlit:$GITHUB_SHA \
+            --platform=managed \
+            --region=${{ secrets.GCP_REGION }} \
+            --memory=1Gi \
+            --allow-unauthenticated 
