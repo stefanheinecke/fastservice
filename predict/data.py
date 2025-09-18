@@ -139,7 +139,7 @@ class Predictor:
         # Ensure Date column is of datetime.date type
         forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.date
         forecast_df["Created_at"] = pd.to_datetime(forecast_df["Created_at"]).dt.date
-
+        print(f"forecast_df: {forecast_df}")
         # Merge and find new records
         merged = forecast_df.merge(
             existing,
@@ -147,9 +147,9 @@ class Predictor:
             how="left",
             indicator=True
         )
-
+        print(f"merged: {merged}")
         new_rows = merged[merged["_merge"] == "left_only"].drop(columns=["_merge"])
-
+        print(f"new_rows: {new_rows}")
         if not new_rows.empty:
             table_ref = f"{self.project_id}.{self.dataset_id}.{self.table_id}"
             job = self.client.load_table_from_dataframe(
