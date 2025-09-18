@@ -1,3 +1,4 @@
+import uuid
 import yfinance as yf
 import ta
 import pandas as pd
@@ -116,6 +117,7 @@ class Predictor:
         # 🧮 Display 5-Day Forecasted Prices
         future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=5, freq="B").strftime("%Y-%m-%d")
         forecast_df = pd.DataFrame({
+            "id": [str(uuid.uuid4()) for _ in range(5)],    
             "Date": future_dates,
             "Predicted_Close": np.round(future_preds, 2)
         })
