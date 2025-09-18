@@ -139,17 +139,17 @@ class Predictor:
         # Ensure Date column is of datetime.date type
         forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.date
         forecast_df["Created_at"] = pd.to_datetime(forecast_df["Created_at"]).dt.date
-        print(f"forecast_df: {forecast_df}")
         # Merge and find new records
         merged = forecast_df.merge(
             existing,
-            on=["id", "Date", "Created_at", "Symbol"],
+            on=["Date", "Created_at", "Symbol"],
             how="left",
             indicator=True
         )
-        print(f"merged: {merged}")
+        merged.rename(columns={"id_x": "id"}, inplace=True)
+
         new_rows = merged[merged["_merge"] == "left_only"].drop(columns=["_merge"])
-        print(f"new_rows: {new_rows}")
+
         if not new_rows.empty:
             table_ref = f"{self.project_id}.{self.dataset_id}.{self.table_id}"
             job = self.client.load_table_from_dataframe(
@@ -190,7 +190,7 @@ class Predictor:
         # Prepare DataFrame for upload
         real_close_df["Date"] = pd.to_datetime(real_close_df["Date"])
         temp_table_id = f"{self.dataset_id}.temp_real_close_update"
-        print(f"real_close_df:\n{real_close_df}")
+
         # Upload to temporary table
         job = self.client.load_table_from_dataframe(
             real_close_df,
@@ -213,7 +213,7 @@ class Predictor:
             WHEN MATCHED THEN
             UPDATE SET T.Real_Close = S.Real_Close
         """
-        print(f"Executing merge query:\n{merge_query}")
+
         merge_job = self.client.query(merge_query)
         merge_job.result()
 
