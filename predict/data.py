@@ -143,7 +143,7 @@ class Predictor:
         # Merge and find new records
         merged = forecast_df.merge(
             existing,
-            on=["Date", "Created_at", "Symbol"],
+            on=["id", "Date", "Created_at", "Symbol"],
             how="left",
             indicator=True
         )
