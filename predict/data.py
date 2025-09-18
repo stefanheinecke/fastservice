@@ -190,6 +190,7 @@ class Predictor:
         # Prepare DataFrame for upload
         real_close_df["Date"] = pd.to_datetime(real_close_df["Date"])
         temp_table_id = f"{self.dataset_id}.temp_real_close_update"
+        print(f"real_close_df:\n{real_close_df}")
         # Upload to temporary table
         job = self.client.load_table_from_dataframe(
             real_close_df,
@@ -212,11 +213,12 @@ class Predictor:
             WHEN MATCHED THEN
             UPDATE SET T.Real_Close = S.Real_Close
         """
+        print(f"Executing merge query:\n{merge_query}")
         merge_job = self.client.query(merge_query)
         merge_job.result()
 
         # Optionally, delete the temp table
-        self.client.delete_table(f"{self.project_id}.{temp_table_id}", not_found_ok=True)
+        # self.client.delete_table(f"{self.project_id}.{temp_table_id}", not_found_ok=True)
         print("Real_Close column updated for matching dates.")
 
     def fetch_prediction_history(self, target_date):
