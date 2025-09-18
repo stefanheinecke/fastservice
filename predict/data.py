@@ -20,7 +20,6 @@ os.environ['PYTHONHASHSEED'] = str(SEED)
 
 # Load data
 def load_data(symbol: str):
-    # For EURO STOXX 50, use the ticker symbol "^STOXX50E"
     df = yf.Ticker("^" + symbol).history(period="5y")[["Open", "High", "Low", "Close", "Volume"]]
     df = ta.add_all_ta_features(
         df,
@@ -128,13 +127,13 @@ class Predictor:
         print("Storing predictions in BigQuery...")
 
         query = f"""
-            SELECT Date, Created_at, Symbol
+            SELECT id, Date, Created_at, Symbol
             FROM `{self.project_id}.{self.dataset_id}.{self.table_id}`
             """
         existing = self.client.query(query).to_dataframe()
 
         # Ensure only Date and Predicted_Close columns are present
-        forecast_df = forecast_df[["Created_at", "Symbol", "Date", "Predicted_Close"]]
+        forecast_df = forecast_df[["id", "Created_at", "Symbol", "Date", "Predicted_Close"]]
         # Ensure Date column is of datetime.date type
         forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.date
         forecast_df["Created_at"] = pd.to_datetime(forecast_df["Created_at"]).dt.date
@@ -157,6 +156,7 @@ class Predictor:
                 job_config=bigquery.LoadJobConfig(
                     write_disposition="WRITE_APPEND",
                     schema=[
+                        bigquery.SchemaField("id", "STRING"),
                         bigquery.SchemaField("Created_at", "DATE"),
                         bigquery.SchemaField("Symbol", "STRING"),
                         bigquery.SchemaField("Date", "DATE"),

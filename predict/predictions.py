@@ -12,6 +12,7 @@ from sklearn.metrics import mean_squared_error
 from google.cloud import bigquery
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+from enums import CloudProvider
 
 # Fix randomness
 SEED = 42
@@ -20,14 +21,16 @@ np.random.seed(SEED)
 tf.random.set_seed(SEED)
 os.environ['PYTHONHASHSEED'] = str(SEED)
 
-st.set_page_config(page_title="SX5E Forecast", layout="wide")
-st.title("EURO STOXX 50 (SX5E) Stock Prediction with Deep Learning")
+st.set_page_config(page_title="Forecast", layout="wide")
+st.title("Prediction")
+
+cloud_provider = CloudProvider.GCP
 
 # Load data
 @st.cache_data
 def load_data():
-    # For EURO STOXX 50, use the ticker symbol "^STOXX50E"
-    df = yf.Ticker("^STOXX50E").history(period="5y")[["Open", "High", "Low", "Close", "Volume"]]
+    symbol = "^STOXX50E"
+    df = yf.Ticker(symbol).history(period="5y")[["Open", "High", "Low", "Close", "Volume"]]
     df = ta.add_all_ta_features(
         df,
         open="Open", high="High", low="Low", close="Close", volume="Volume",
@@ -62,8 +65,8 @@ X = np.array(features)
 y = np.array(labels).reshape(-1, 1)
 
 # Scaling
-X_scaler = MinMaxScaler()
-y_scaler = MinMaxScaler()
+X_scaler = MinMaxScaler(feature_range=(0.1, 0.9))
+y_scaler = MinMaxScaler(feature_range=(0.1, 0.9))
 X_scaled = X_scaler.fit_transform(X)
 y_scaled = y_scaler.fit_transform(y)
 
@@ -76,7 +79,7 @@ model = tf.keras.models.Sequential([
     tf.keras.layers.Dense(128, activation="relu"),
     tf.keras.layers.Dense(1)
 ])
-model.compile(optimizer="adam", loss="mse", metrics=["mae"])
+model.compile(optimizer="adam", loss="mae", metrics=["mse"])
 model.fit(X_train, y_train, epochs=10, batch_size=16, verbose=0)
 
 # Evaluation
@@ -123,7 +126,7 @@ fig, ax = plt.subplots(figsize=(10, 5))
 ax.plot(actual, label="Actual", color="black")
 ax.plot(preds, label="Predicted", color="orange")
 ax.plot(range(len(actual), len(actual) + 5), future_preds, linestyle="--", marker="o", label="Forecast", color="blue")
-ax.set_title("EURO STOXX 50 (SX5E) Stock Forecast")
+ax.set_title("Forecast")
 ax.legend()
 st.pyplot(fig)
 
@@ -138,7 +141,7 @@ fig.add_trace(go.Scatter(
     line=dict(color="blue", dash="dash"),
     mode="lines+markers"
 ))
-fig.update_layout(title="EURO STOXX 50 (SX5E) Stock Forecast")
+fig.update_layout(title="Forecast")
 st.plotly_chart(fig, use_container_width=True)
 
 # Display 5-Day Forecasted Prices
@@ -156,20 +159,15 @@ st.dataframe(forecast_df, use_container_width=True)
 # - Date (STRING or DATE)
 # - Predicted_Close (FLOAT)
 
-# Set your project and table details
-project_id = "my-sh-project-398715"
-dataset_id = "predict_data"
-table_id = "prediction"
+client = bigquery.Client(project=cloud_provider.project_id)
+table_ref = f"{cloud_provider.project_id}.{cloud_provider.dataset_id}.{cloud_provider.table_id}"
 
-client = bigquery.Client(project=project_id)
-table_ref = f"{project_id}.{dataset_id}.{table_id}"
-
-# job = client.load_table_from_dataframe(
-#     forecast_df,
-#     table_ref,
-#     job_config=bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
-# )
-# job.result()  # Wait for the job to complete
+job = client.load_table_from_dataframe(
+    forecast_df,
+    table_ref,
+    job_config=bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
+)
+job.result()  # Wait for the job to complete
 st.success("Forecast uploaded to BigQuery!")
 
 csv = forecast_df.to_csv(index=False).encode("utf-8")
@@ -183,8 +181,9 @@ dates = df.index[-30:]
 
 # Calculate deviation and direction correctness
 deviation_pct = ((preds - actual) / actual) * 100
+
 direction_correct = np.sign(np.diff(actual)) == np.sign(np.diff(preds))
-direction_correct = np.insert(direction_correct, 0, np.nan)  # First row has no previous comparison
+direction_correct = np.append(direction_correct, np.nan)  # Last row has no next-day comparison
 
 # Build DataFrame
 eval_df = pd.DataFrame({

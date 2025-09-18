@@ -3,13 +3,11 @@ import pandas as pd
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 from data import Predictor
+from enums import CloudProvider
 
 app = FastAPI()
 
-@app.get("/hello_sum")
-def sum_numbers(a: float = Query(...), b: float = Query(...)):
-    result = a + b
-    return JSONResponse(content={"sum": result})
+cloud_provider = CloudProvider.GCP
     
 @app.get("/history")
 def get_history(symbol: str = Query(...)):
@@ -26,7 +24,7 @@ def get_predictions(symbol: str = Query(...)):
 @app.get("/store_predictions")
 def store_predictions(symbol: str = Query(...)):
 
-    predict_obj = Predictor("my-sh-project-398715", "predict_data", "prediction", symbol)
+    predict_obj = Predictor(cloud_provider.project_id, cloud_provider.dataset_id, cloud_provider.table_id, symbol)
     print(f"Storing predictions for {symbol}...")
 
     forecast_df, df = predict_obj.create_predictions()
@@ -44,7 +42,7 @@ def prediction_history(
     symbol: str = Query(...),
     date: str = Query(...)  # Format: YYYY-MM-DD
 ):
-    predict_obj = Predictor("my-sh-project-398715", "predict_data", "prediction", symbol)
+    predict_obj = Predictor(cloud_provider.project_id, cloud_provider.dataset_id, cloud_provider.table_id, symbol)
     df = predict_obj.fetch_prediction_history(date)
     df["Created_at"] = df["Created_at"].astype(str)
     df["Real_Close"] = df["Real_Close"].apply(lambda x: "NaN" if pd.isna(x) else x)
