@@ -146,7 +146,8 @@ st.plotly_chart(fig, use_container_width=True)
 
 # Display 5-Day Forecasted Prices
 st.subheader("Next 5-Day Forecast")
-future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=5, freq="B").strftime("%Y-%m-%d")
+#future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=5, freq="B").strftime("%Y-%m-%d")
+future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=5, freq="B").date
 forecast_df = pd.DataFrame({
     "Date": future_dates,
     "Predicted_Close": np.round(future_preds, 2)
