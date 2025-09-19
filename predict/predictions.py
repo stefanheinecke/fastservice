@@ -162,6 +162,9 @@ st.dataframe(forecast_df, use_container_width=True)
 client = bigquery.Client(project=cloud_provider.project_id)
 table_ref = f"{cloud_provider.project_id}.{cloud_provider.dataset_id}.{cloud_provider.table_id}"
 
+print(f"forecast_df: {forecast_df}")
+print(f"table_ref: {table_ref}")
+
 job = client.load_table_from_dataframe(
     forecast_df,
     table_ref,
