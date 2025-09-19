@@ -39,9 +39,8 @@ def store_predictions(symbol: str = Query(...)):
 
 @app.get("/predictions")
 def prediction_history(
-    symbol: str = Query(...),
-    date: str = Query(...)  # Format: YYYY-MM-DD
+    symbol: str = Query(...)
 ):
     predict_obj = Predictor(cloud_provider.project_id, cloud_provider.dataset_id, cloud_provider.table_id, symbol)
-    df = predict_obj.fetch_prediction_history(date)
+    df = predict_obj.fetch_prediction_history()
     return JSONResponse(content={"data": df.to_dict(orient="records")})

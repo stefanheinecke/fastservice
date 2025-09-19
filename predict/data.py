@@ -51,7 +51,7 @@ class Predictor:
         df = df[feature_cols]
 
         # Sliding window
-        window_size = 5
+        window_size = 1
         features, labels = [], []
 
         for i in range(window_size, len(df)):
@@ -106,7 +106,7 @@ class Predictor:
         # Forecast future
         future_preds = []
         latest_window = df.iloc[-window_size:].values.copy()
-        for _ in range(5):
+        for _ in range(1):
             inp = X_scaler.transform(latest_window.flatten().reshape(1, -1))
             p = model.predict(inp)
             unscaled = y_scaler.inverse_transform(p)[0][0]
@@ -115,10 +115,10 @@ class Predictor:
             last_day["Close"] = unscaled
             latest_window = np.vstack((latest_window[1:], last_day.values))
 
-        # 🧮 Display 5-Day Forecasted Prices
-        future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=5, freq="B").strftime("%Y-%m-%d")
+        # 🧮 Display 1-Day Forecasted Price
+        future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=1, freq="B").strftime("%Y-%m-%d")
         forecast_df = pd.DataFrame({
-            "id": [str(uuid.uuid4()) for _ in range(5)],    
+            "id": [str(uuid.uuid4()) for _ in range(1)],    
             "Date": future_dates,
             "Predicted_Close": np.round(future_preds, 2)
         })
@@ -223,23 +223,22 @@ class Predictor:
         # self.client.delete_table(f"{self.project_id}.{temp_table_id}", not_found_ok=True)
         print("Real_Close column updated for matching dates.")
 
-    def fetch_prediction_history(self, target_date):
+    def fetch_prediction_history(self):
         query = f"""
-            SELECT Created_at, Predicted_Close, Real_Close
+            SELECT Date, Created_at, Symbol, Real_Close, Predicted_Close
             FROM `{self.project_id}.{self.dataset_id}.{self.table_id}`
-            WHERE Symbol = @Symbol AND Date = @Date
-            ORDER BY Created_at
+            WHERE Symbol = @Symbol
+            ORDER BY Date DESC, Created_at DESC
         """
         print(f"Executing query: {query}")
         job_config = bigquery.QueryJobConfig(
             query_parameters=[
-                bigquery.ScalarQueryParameter("Symbol", "STRING", self.symbol),
-                bigquery.ScalarQueryParameter("Date", "DATE", target_date)
+                bigquery.ScalarQueryParameter("Symbol", "STRING", self.symbol)
             ]
         )
         print(f"Query Job Config: {job_config}")
         df = self.client.query(query, job_config=job_config).to_dataframe()
         df["Created_at"] = df["Created_at"].astype(str)
         df["Real_Close"] = df["Real_Close"].apply(lambda x: "NaN" if pd.isna(x) else x)
-        print(f"Fetched prediction history for {self.symbol} on {target_date}:\n{df}")
+        print(f"Fetched prediction history for {self.symbol}:\n{df}")
         return df

@@ -4,12 +4,12 @@ import ta
 import datetime
 import pandas as pd
 import numpy as np
-import tensorflow as tf
+# import tensorflow as tf
 import os
 import random
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_squared_error
+# from sklearn.model_selection import train_test_split
+# from sklearn.preprocessing import MinMaxScaler
+# from sklearn.metrics import mean_squared_error
 from google.cloud import bigquery
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
@@ -17,18 +17,18 @@ from enums import CloudProvider
 from data import Predictor
 
 # Fix randomness
-SEED = 42
-random.seed(SEED)
-np.random.seed(SEED)
-tf.random.set_seed(SEED)
-os.environ['PYTHONHASHSEED'] = str(SEED)
+# SEED = 42
+# random.seed(SEED)
+# np.random.seed(SEED)
+# tf.random.set_seed(SEED)
+# os.environ['PYTHONHASHSEED'] = str(SEED)
 
 st.set_page_config(page_title="Forecast", layout="wide")
 st.title("Prediction")
 
 cloud_provider = CloudProvider.GCP
 
-symbol = "^STOXX50E"
+symbol = "STOXX50E"
 
 # Load data
 # @st.cache_data
@@ -125,17 +125,25 @@ symbol = "^STOXX50E"
 # st.metric("Directional Accuracy", f"{direction_acc*100:.2f}%")
 
 predict_obj = Predictor(cloud_provider.project_id, cloud_provider.dataset_id, cloud_provider.table_id, symbol)
-df = predict_obj.fetch_prediction_history(datetime.date.today().strftime("%Y-%m-%d"))
-print("---------------")
+df = predict_obj.fetch_prediction_history()
+df.index = df["Date"]
 st.dataframe(df, use_container_width=True)
-print("---------------")
 
 # Plot
-st.subheader("Actual vs. Predicted & 5-Day Forecast")
+actual = df["Real_Close"].values[30:]
+preds = df["Predicted_Close"].values[30:]
+future_preds = df["Predicted_Close"].values[5:]
+st.title("Actual")
+st.dataframe(actual, use_container_width=True)
+st.title("preds")
+st.dataframe(preds, use_container_width=True)
+st.title("future_preds")
+st.dataframe(future_preds, use_container_width=True)
+st.subheader("Actual vs. Predicted & 1-Day Forecast")
 fig, ax = plt.subplots(figsize=(10, 5))
 ax.plot(actual, label="Actual", color="black")
 ax.plot(preds, label="Predicted", color="orange")
-ax.plot(range(len(actual), len(actual) + 5), future_preds, linestyle="--", marker="o", label="Forecast", color="blue")
+ax.plot(range(len(actual), len(actual) + 1), future_preds, linestyle="--", marker="o", label="Forecast", color="blue")
 ax.set_title("Forecast")
 ax.legend()
 st.pyplot(fig)
@@ -145,7 +153,7 @@ fig = go.Figure()
 fig.add_trace(go.Scatter(y=actual, name="Actual", line=dict(color="black")))
 fig.add_trace(go.Scatter(y=preds, name="Predicted", line=dict(color="orange")))
 fig.add_trace(go.Scatter(
-    x=list(range(len(actual), len(actual) + 5)),
+    x=list(range(len(actual), len(actual) + 1)),
     y=future_preds,
     name="Forecast",
     line=dict(color="blue", dash="dash"),
@@ -154,10 +162,10 @@ fig.add_trace(go.Scatter(
 fig.update_layout(title="Forecast")
 st.plotly_chart(fig, use_container_width=True)
 
-# Display 5-Day Forecasted Prices
-st.subheader("Next 5-Day Forecast")
-#future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=5, freq="B").strftime("%Y-%m-%d")
-future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=5, freq="B").date
+# Display 1-Day Forecasted Prices
+st.subheader("Next 1-Day Forecast")
+#future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=1, freq="B").strftime("%Y-%m-%d")
+future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=1, freq="B").date
 forecast_df = pd.DataFrame({
     "Date": future_dates,
     "Predicted_Close": np.round(future_preds, 2)
