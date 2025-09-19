@@ -147,6 +147,7 @@ class Predictor:
             indicator=True
         )
         merged.rename(columns={"id_x": "id"}, inplace=True)
+        merged.drop(columns=["id_y"], inplace=True)
 
         new_rows = merged[merged["_merge"] == "left_only"].drop(columns=["_merge"])
 
