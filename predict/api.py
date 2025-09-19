@@ -15,11 +15,11 @@ def get_history(symbol: str = Query(...)):
     history_data = history_df.to_dict(orient="records")
     return JSONResponse(content={"history": list(history_data)})
 
-@app.get("/predictions")
-def get_predictions(symbol: str = Query(...)):
-    forecast_df = data.create_predictions(symbol)
-    forecast_data = forecast_df.to_dict(orient="records")
-    return JSONResponse(content={"predictions": list(forecast_data)})
+# @app.get("/predictions")
+# def get_predictions(symbol: str = Query(...)):
+#     forecast_df = data.create_predictions(symbol)
+#     forecast_data = forecast_df.to_dict(orient="records")
+#     return JSONResponse(content={"predictions": list(forecast_data)})
 
 @app.get("/store_predictions")
 def store_predictions(symbol: str = Query(...)):
@@ -37,13 +37,11 @@ def store_predictions(symbol: str = Query(...)):
 
     return JSONResponse(content={"message": "Predictions stored successfully."})
 
-@app.get("/dashboard")
+@app.get("/predictions")
 def prediction_history(
     symbol: str = Query(...),
     date: str = Query(...)  # Format: YYYY-MM-DD
 ):
     predict_obj = Predictor(cloud_provider.project_id, cloud_provider.dataset_id, cloud_provider.table_id, symbol)
     df = predict_obj.fetch_prediction_history(date)
-    df["Created_at"] = df["Created_at"].astype(str)
-    df["Real_Close"] = df["Real_Close"].apply(lambda x: "NaN" if pd.isna(x) else x)
     return JSONResponse(content={"data": df.to_dict(orient="records")})

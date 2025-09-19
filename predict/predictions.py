@@ -1,6 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import ta
+import datetime
 import pandas as pd
 import numpy as np
 import tensorflow as tf
@@ -13,6 +14,7 @@ from google.cloud import bigquery
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from enums import CloudProvider
+from data import Predictor
 
 # Fix randomness
 SEED = 42
@@ -26,99 +28,107 @@ st.title("Prediction")
 
 cloud_provider = CloudProvider.GCP
 
+symbol = "^STOXX50E"
+
 # Load data
-@st.cache_data
-def load_data():
-    symbol = "^STOXX50E"
-    df = yf.Ticker(symbol).history(period="5y")[["Open", "High", "Low", "Close", "Volume"]]
-    df = ta.add_all_ta_features(
-        df,
-        open="Open", high="High", low="Low", close="Close", volume="Volume",
-        fillna=True)
-    return df.dropna()
+# @st.cache_data
+# def load_data():
+    
+#     df = yf.Ticker(symbol).history(period="5y")[["Open", "High", "Low", "Close", "Volume"]]
+#     df = ta.add_all_ta_features(
+#         df,
+#         open="Open", high="High", low="Low", close="Close", volume="Volume",
+#         fillna=True)
+#     return df.dropna()
 
-df = load_data()
-df.index = pd.to_datetime(df.index).date
-df["Date"] = df.index
-st.subheader("Historical Data Preview")
-st.dataframe(df.tail(10), use_container_width=True)
+# df = load_data()
+# df.index = pd.to_datetime(df.index).date
+# df["Date"] = df.index
+# st.subheader("Historical Data Preview")
+# st.dataframe(df.tail(10), use_container_width=True)
 
-# Feature setup
-feature_cols = [
-    "Open", "High", "Low", "Close", "Volume",
-    "momentum_rsi", "trend_macd", "momentum_stoch",
-    "volatility_bbm", "volatility_bbh", "volatility_bbl",
-    "volatility_atr", "trend_ema_fast", "volume_obv"
-]
-df = df[feature_cols]
+# # Feature setup
+# feature_cols = [
+#     "Open", "High", "Low", "Close", "Volume",
+#     "momentum_rsi", "trend_macd", "momentum_stoch",
+#     "volatility_bbm", "volatility_bbh", "volatility_bbl",
+#     "volatility_atr", "trend_ema_fast", "volume_obv"
+# ]
+# df = df[feature_cols]
 
-# Sliding window
-window_size = 5
-features, labels = [], []
+# # Sliding window
+# window_size = 5
+# features, labels = [], []
 
-for i in range(window_size, len(df)):
-    window = df.iloc[i - window_size:i].values.flatten()
-    features.append(window)
-    labels.append(df["Close"].values[i])
+# for i in range(window_size, len(df)):
+#     window = df.iloc[i - window_size:i].values.flatten()
+#     features.append(window)
+#     labels.append(df["Close"].values[i])
 
-X = np.array(features)
-y = np.array(labels).reshape(-1, 1)
+# X = np.array(features)
+# y = np.array(labels).reshape(-1, 1)
 
-# Scaling
-X_scaler = MinMaxScaler(feature_range=(0.1, 0.9))
-y_scaler = MinMaxScaler(feature_range=(0.1, 0.9))
-X_scaled = X_scaler.fit_transform(X)
-y_scaled = y_scaler.fit_transform(y)
+# # Scaling
+# X_scaler = MinMaxScaler(feature_range=(0.1, 0.9))
+# y_scaler = MinMaxScaler(feature_range=(0.1, 0.9))
+# X_scaled = X_scaler.fit_transform(X)
+# y_scaled = y_scaler.fit_transform(y)
 
-# Train/test split
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=SEED)
+# # Train/test split
+# X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=SEED)
 
-# Model
-model = tf.keras.models.Sequential([
-    tf.keras.layers.Dense(256, activation="relu", input_shape=(X.shape[1],)),
-    tf.keras.layers.Dense(128, activation="relu"),
-    tf.keras.layers.Dense(1)
-])
-model.compile(optimizer="adam", loss="mae", metrics=["mse"])
-model.fit(X_train, y_train, epochs=10, batch_size=16, verbose=0)
+# # Model
+# model = tf.keras.models.Sequential([
+#     tf.keras.layers.Dense(256, activation="relu", input_shape=(X.shape[1],)),
+#     tf.keras.layers.Dense(128, activation="relu"),
+#     tf.keras.layers.Dense(1)
+# ])
+# model.compile(optimizer="adam", loss="mae", metrics=["mse"])
+# model.fit(X_train, y_train, epochs=10, batch_size=16, verbose=0)
 
-# Evaluation
-loss, mae = model.evaluate(X_test, y_test, verbose=0)
-y_pred_scaled = model.predict(X_test)
-y_pred = y_scaler.inverse_transform(y_pred_scaled).flatten()
-y_true = y_scaler.inverse_transform(y_test).flatten()
-real_mae = np.mean(np.abs(y_true - y_pred))
-rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
-direction_acc = np.mean((np.diff(y_true) > 0) == (np.diff(y_pred) > 0))
+# # Evaluation
+# loss, mae = model.evaluate(X_test, y_test, verbose=0)
+# y_pred_scaled = model.predict(X_test)
+# y_pred = y_scaler.inverse_transform(y_pred_scaled).flatten()
+# y_true = y_scaler.inverse_transform(y_test).flatten()
+# real_mae = np.mean(np.abs(y_true - y_pred))
+# rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+# mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+# direction_acc = np.mean((np.diff(y_true) > 0) == (np.diff(y_pred) > 0))
 
-st.subheader("Model Evaluation")
-st.metric("Mean Absolute Error (MAE)", f"${real_mae:.2f}")
-st.metric("Root Mean Squared Error (RMSE)", f"${rmse:.2f}")
-st.metric("Mean Absolute Percentage Error (MAPE)", f"{mape:.2f}%")
-st.metric("Directional Accuracy", f"{direction_acc*100:.2f}%")
+# # Rolling predictions
+# actual = df["Close"].values[-30:]
+# preds = []
+# for i in range(-30, 0):
+#     w = df.iloc[i - window_size:i].values.flatten().reshape(1, -1)
+#     ws = X_scaler.transform(w)
+#     p = model.predict(ws)
+#     preds.append(y_scaler.inverse_transform(p)[0][0])
+# preds = np.array(preds)
 
-# Rolling predictions
-actual = df["Close"].values[-30:]
-preds = []
-for i in range(-30, 0):
-    w = df.iloc[i - window_size:i].values.flatten().reshape(1, -1)
-    ws = X_scaler.transform(w)
-    p = model.predict(ws)
-    preds.append(y_scaler.inverse_transform(p)[0][0])
-preds = np.array(preds)
+# # Forecast future
+# future_preds = []
+# latest_window = df.iloc[-window_size:].values.copy()
+# for _ in range(5):
+#     inp = X_scaler.transform(latest_window.flatten().reshape(1, -1))
+#     p = model.predict(inp)
+#     unscaled = y_scaler.inverse_transform(p)[0][0]
+#     future_preds.append(unscaled)
+#     last_day = df.iloc[-1].copy()
+#     last_day["Close"] = unscaled
+#     latest_window = np.vstack((latest_window[1:], last_day.values))
 
-# Forecast future
-future_preds = []
-latest_window = df.iloc[-window_size:].values.copy()
-for _ in range(5):
-    inp = X_scaler.transform(latest_window.flatten().reshape(1, -1))
-    p = model.predict(inp)
-    unscaled = y_scaler.inverse_transform(p)[0][0]
-    future_preds.append(unscaled)
-    last_day = df.iloc[-1].copy()
-    last_day["Close"] = unscaled
-    latest_window = np.vstack((latest_window[1:], last_day.values))
+# st.subheader("Model Evaluation")
+# st.metric("Mean Absolute Error (MAE)", f"${real_mae:.2f}")
+# st.metric("Root Mean Squared Error (RMSE)", f"${rmse:.2f}")
+# st.metric("Mean Absolute Percentage Error (MAPE)", f"{mape:.2f}%")
+# st.metric("Directional Accuracy", f"{direction_acc*100:.2f}%")
+
+predict_obj = Predictor(cloud_provider.project_id, cloud_provider.dataset_id, cloud_provider.table_id, symbol)
+df = predict_obj.fetch_prediction_history(datetime.date.today().strftime("%Y-%m-%d"))
+print("---------------")
+st.dataframe(df, use_container_width=True)
+print("---------------")
 
 # Plot
 st.subheader("Actual vs. Predicted & 5-Day Forecast")

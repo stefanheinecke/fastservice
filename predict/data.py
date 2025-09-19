@@ -94,6 +94,7 @@ class Predictor:
         direction_acc = np.mean((np.diff(y_true) > 0) == (np.diff(y_pred) > 0))
 
         # Rolling predictions
+        actual = df["Close"].values[-30:]
         preds = []
         for i in range(-30, 0):
             w = df.iloc[i - window_size:i].values.flatten().reshape(1, -1)
@@ -238,5 +239,7 @@ class Predictor:
         )
         print(f"Query Job Config: {job_config}")
         df = self.client.query(query, job_config=job_config).to_dataframe()
+        df["Created_at"] = df["Created_at"].astype(str)
+        df["Real_Close"] = df["Real_Close"].apply(lambda x: "NaN" if pd.isna(x) else x)
         print(f"Fetched prediction history for {self.symbol} on {target_date}:\n{df}")
         return df
