@@ -127,45 +127,47 @@ symbol = "STOXX50E"
 predict_obj = Predictor(cloud_provider.project_id, cloud_provider.dataset_id, cloud_provider.table_id, symbol)
 df = predict_obj.fetch_prediction_history()
 df.index = df["Date"]
+df["Real_Close"] = pd.to_numeric(df["Real_Close"], errors="coerce")
+#df["Real_Close"] = df["Real_Close"].fillna(0)
 st.dataframe(df, use_container_width=True)
 
-# Plot
-actual = df["Real_Close"].values[30:]
-preds = df["Predicted_Close"].values[30:]
-future_preds = df["Predicted_Close"].values[5:]
-st.title("Actual")
-st.dataframe(actual, use_container_width=True)
-st.title("preds")
-st.dataframe(preds, use_container_width=True)
-st.title("future_preds")
-st.dataframe(future_preds, use_container_width=True)
+# Plot with dates on x-axis
+actual = df["Real_Close"].head(10).values
+preds = df["Predicted_Close"].head(10).values
+future_preds = df["Predicted_Close"].head(1).values
+dates = pd.to_datetime(df["Date"].head(10))
+future_date = pd.to_datetime(df["Date"].head(1)).values[0]
+
 st.subheader("Actual vs. Predicted & 1-Day Forecast")
 fig, ax = plt.subplots(figsize=(10, 5))
-ax.plot(actual, label="Actual", color="black")
-ax.plot(preds, label="Predicted", color="orange")
-ax.plot(range(len(actual), len(actual) + 1), future_preds, linestyle="--", marker="o", label="Forecast", color="blue")
+ax.plot(dates, actual, label="Actual", color="black")
+ax.plot(dates, preds, label="Predicted", color="orange")
+ax.plot([future_date], future_preds, linestyle="--", marker="o", label="Forecast", color="blue")
 ax.set_title("Forecast")
+ax.set_xlabel("Date")
 ax.legend()
+fig.autofmt_xdate()
 st.pyplot(fig)
 
 # Plotly
-fig = go.Figure()
-fig.add_trace(go.Scatter(y=actual, name="Actual", line=dict(color="black")))
-fig.add_trace(go.Scatter(y=preds, name="Predicted", line=dict(color="orange")))
-fig.add_trace(go.Scatter(
-    x=list(range(len(actual), len(actual) + 1)),
-    y=future_preds,
-    name="Forecast",
-    line=dict(color="blue", dash="dash"),
-    mode="lines+markers"
-))
-fig.update_layout(title="Forecast")
-st.plotly_chart(fig, use_container_width=True)
+# fig = go.Figure()
+# fig.add_trace(go.Scatter(y=actual, name="Actual", line=dict(color="black")))
+# fig.add_trace(go.Scatter(y=preds, name="Predicted", line=dict(color="orange")))
+# fig.add_trace(go.Scatter(
+#     x=list(range(len(actual), len(actual) + 1)),
+#     y=future_preds,
+#     name="Forecast",
+#     line=dict(color="blue", dash="dash"),
+#     mode="lines+markers"
+# ))
+# fig.update_layout(title="Forecast")
+# st.plotly_chart(fig, use_container_width=True)
 
 # Display 1-Day Forecasted Prices
 st.subheader("Next 1-Day Forecast")
 #future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=1, freq="B").strftime("%Y-%m-%d")
-future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=1, freq="B").date
+#future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=0), periods=1, freq="B").date
+future_dates = df["Date"].head(1).values
 forecast_df = pd.DataFrame({
     "Date": future_dates,
     "Predicted_Close": np.round(future_preds, 2)
@@ -178,42 +180,42 @@ st.dataframe(forecast_df, use_container_width=True)
 # - Date (STRING or DATE)
 # - Predicted_Close (FLOAT)
 
-client = bigquery.Client(project=cloud_provider.project_id)
-table_ref = f"{cloud_provider.project_id}.{cloud_provider.dataset_id}.{cloud_provider.table_id}"
+# client = bigquery.Client(project=cloud_provider.project_id)
+# table_ref = f"{cloud_provider.project_id}.{cloud_provider.dataset_id}.{cloud_provider.table_id}"
 
-print(f"forecast_df: {forecast_df}")
-print(f"table_ref: {table_ref}")
+# print(f"forecast_df: {forecast_df}")
+# print(f"table_ref: {table_ref}")
 
-job = client.load_table_from_dataframe(
-    forecast_df,
-    table_ref,
-    job_config=bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
-)
-job.result()  # Wait for the job to complete
-st.success("Forecast uploaded to BigQuery!")
+# job = client.load_table_from_dataframe(
+#     forecast_df,
+#     table_ref,
+#     job_config=bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
+# )
+# job.result()  # Wait for the job to complete
+# st.success("Forecast uploaded to BigQuery!")
 
 csv = forecast_df.to_csv(index=False).encode("utf-8")
 st.download_button("📥 Download CSV Report", data=csv, file_name="sx5e_prediction_report.csv", mime="text/csv")
 
 # Evaluation Table: Actual vs Predicted
-st.subheader("Actual vs. Predicted Table")
+# st.subheader("Actual vs. Predicted Table")
 
-# Get the last 30 dates
-dates = df.index[-30:]
+# # Get the last 30 dates
+# dates = df.index[-30:]
 
-# Calculate deviation and direction correctness
-deviation_pct = ((preds - actual) / actual) * 100
+# # Calculate deviation and direction correctness
+# deviation_pct = ((preds - actual) / actual) * 100
 
-direction_correct = np.sign(np.diff(actual)) == np.sign(np.diff(preds))
-direction_correct = np.append(direction_correct, np.nan)  # Last row has no next-day comparison
+# direction_correct = np.sign(np.diff(actual)) == np.sign(np.diff(preds))
+# direction_correct = np.append(direction_correct, np.nan)  # Last row has no next-day comparison
 
-# Build DataFrame
-eval_df = pd.DataFrame({
-    "Date": dates,
-    "Actual_Close": np.round(actual, 2),
-    "Predicted_Close": np.round(preds, 2),
-    "Deviation (%)": np.round(deviation_pct, 2),
-    "Correct Direction": direction_correct
-})
+# # Build DataFrame
+# eval_df = pd.DataFrame({
+#     "Date": dates,
+#     "Actual_Close": np.round(actual, 2),
+#     "Predicted_Close": np.round(preds, 2),
+#     "Deviation (%)": np.round(deviation_pct, 2),
+#     "Correct Direction": direction_correct
+# })
 
-st.dataframe(eval_df, use_container_width=True)
+# st.dataframe(eval_df, use_container_width=True)
