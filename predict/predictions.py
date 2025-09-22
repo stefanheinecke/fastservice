@@ -23,6 +23,14 @@ from data import Predictor
 # tf.random.set_seed(SEED)
 # os.environ['PYTHONHASHSEED'] = str(SEED)
 
+adsense_code = """
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9614544934238374"
+     crossorigin="anonymous"></script>
+"""
+
+st.markdown(adsense_code, unsafe_allow_html=True)
+
+
 st.set_page_config(page_title="Forecast", layout="wide")
 st.title("Prediction")
 
