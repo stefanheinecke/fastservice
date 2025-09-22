@@ -1,5 +1,4 @@
 import data
-import pandas as pd
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 from data import Predictor
@@ -14,12 +13,6 @@ def get_history(symbol: str = Query(...)):
     history_df = data.load_data(symbol)
     history_data = history_df.to_dict(orient="records")
     return JSONResponse(content={"history": list(history_data)})
-
-# @app.get("/predictions")
-# def get_predictions(symbol: str = Query(...)):
-#     forecast_df = data.create_predictions(symbol)
-#     forecast_data = forecast_df.to_dict(orient="records")
-#     return JSONResponse(content={"predictions": list(forecast_data)})
 
 @app.get("/store_predictions")
 def store_predictions(symbol: str = Query(...)):
