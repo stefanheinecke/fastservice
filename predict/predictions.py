@@ -36,7 +36,7 @@ st.title("Prediction")
 
 cloud_provider = CloudProvider.GCP
 
-symbol = "STOXX50E"
+symbol = "GC=F"
 
 # Load data
 # @st.cache_data
