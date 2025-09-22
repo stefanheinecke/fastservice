@@ -21,7 +21,7 @@ os.environ['PYTHONHASHSEED'] = str(SEED)
 
 # Load data
 def load_data(symbol: str):
-    df = yf.Ticker("^" + symbol).history(period="5y")[["Open", "High", "Low", "Close", "Volume"]]
+    df = yf.Ticker("^" + symbol).history(period="5y", interval="1d")[["Open", "High", "Low", "Close", "Volume"]]
     df = ta.add_all_ta_features(
         df,
         open="Open", high="High", low="Low", close="Close", volume="Volume",
