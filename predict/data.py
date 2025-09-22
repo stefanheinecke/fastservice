@@ -51,7 +51,7 @@ class Predictor:
         df = df[feature_cols]
 
         # Sliding window
-        window_size = 1
+        window_size = 30
         features, labels = [], []
 
         for i in range(window_size, len(df)):
@@ -116,6 +116,15 @@ class Predictor:
             latest_window = np.vstack((latest_window[1:], last_day.values))
 
         # 🧮 Display 1-Day Forecasted Price
+        past_dates = pd.date_range(start=df.index[-30] + pd.Timedelta(days=1), periods=30, freq="B").strftime("%Y-%m-%d")
+        past_df = pd.DataFrame({
+            "id": [str(uuid.uuid4()) for _ in range(30)],    
+            "Date": past_dates,
+            "Predicted_Close": np.round(preds, 2)
+        })
+        past_df["Symbol"] = self.symbol
+        past_df["Created_at"] = pd.Timestamp.today().date()
+
         future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=1, freq="B").strftime("%Y-%m-%d")
         forecast_df = pd.DataFrame({
             "id": [str(uuid.uuid4()) for _ in range(1)],    
@@ -124,7 +133,7 @@ class Predictor:
         })
         forecast_df["Symbol"] = self.symbol
         forecast_df["Created_at"] = pd.Timestamp.today().date()
-        return forecast_df, df
+        return forecast_df, past_df, df
 
     def store_predictions(self, forecast_df):
         print("Storing predictions in BigQuery...")
