@@ -51,7 +51,7 @@ class Predictor:
         df = df[feature_cols]
 
         # Sliding window
-        window_size = 30
+        window_size = 100
         features, labels = [], []
 
         for i in range(window_size, len(df)):
@@ -94,9 +94,8 @@ class Predictor:
         direction_acc = np.mean((np.diff(y_true) > 0) == (np.diff(y_pred) > 0))
 
         # Rolling predictions
-        actual = df["Close"].values[-30:]
         preds = []
-        for i in range(-30, 0):
+        for i in range(-window_size, 0):
             w = df.iloc[i - window_size:i].values.flatten().reshape(1, -1)
             ws = X_scaler.transform(w)
             p = model.predict(ws)
@@ -116,9 +115,9 @@ class Predictor:
             latest_window = np.vstack((latest_window[1:], last_day.values))
 
         # 🧮 Display 1-Day Forecasted Price
-        past_dates = pd.date_range(start=df.index[-30] + pd.Timedelta(days=1), periods=30, freq="B").strftime("%Y-%m-%d")
+        past_dates = pd.date_range(start=df.index[-window_size] + pd.Timedelta(days=1), periods=window_size, freq="B").strftime("%Y-%m-%d")
         past_df = pd.DataFrame({
-            "id": [str(uuid.uuid4()) for _ in range(30)],    
+            "id": [str(uuid.uuid4()) for _ in range(window_size)],    
             "Date": past_dates,
             "Predicted_Close": np.round(preds, 2)
         })
@@ -249,5 +248,17 @@ class Predictor:
         df = self.client.query(query, job_config=job_config).to_dataframe()
         df["Created_at"] = df["Created_at"].astype(str)
         df["Real_Close"] = df["Real_Close"].apply(lambda x: "NaN" if pd.isna(x) else x)
+        # Compare each value with the previous day's value
+        df["Real_Close"] = pd.to_numeric(df["Real_Close"], errors="coerce")
+        df["Predicted_Close"] = pd.to_numeric(df["Predicted_Close"], errors="coerce")
+        df["Real_Close_diff"] = df["Real_Close"].diff()
+        df["Predicted_Close_diff"] = df["Predicted_Close"].diff()
+
+        # Condition: both increasing OR both decreasing
+        df["Correct_Direction"] = ((df["Real_Close_diff"] > 0) & (df["Predicted_Close_diff"] > 0)) | \
+                ((df["Real_Close_diff"] < 0) & (df["Predicted_Close_diff"] < 0))
+        df.drop(columns=["Real_Close_diff", "Predicted_Close_diff"], inplace=True)
         print(f"Fetched prediction history for {self.symbol}:\n{df}")
-        return df
+        correct_direction = df["Correct_Direction"].sum()
+        correct_direction_perc = correct_direction / len(df) * 100 if len(df) > 0 else 0
+        return df, correct_direction_perc

@@ -21,10 +21,12 @@ cloud_provider = CloudProvider.GCP
 symbol = "GC=F"
 
 predict_obj = Predictor(cloud_provider.project_id, cloud_provider.dataset_id, cloud_provider.table_id, symbol)
-df = predict_obj.fetch_prediction_history()
+df, correct_direction_perc = predict_obj.fetch_prediction_history()
 df.index = df["Date"]
 df["Real_Close"] = pd.to_numeric(df["Real_Close"], errors="coerce")
 st.dataframe(df, use_container_width=True)
+
+st.metric(label="Correct Direction (%)", value=f"{correct_direction_perc:.2f}")
 
 # Plot with dates on x-axis
 actual = df["Real_Close"].head(10).values
