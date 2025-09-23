@@ -5,16 +5,20 @@ import matplotlib.pyplot as plt
 from enums import CloudProvider
 from data import Predictor
 
+st.set_page_config(page_title="Gold Price Predictor", layout="centered")
 
-st.set_page_config(page_title="Forecast", layout="wide")
-st.title("Prediction")
+# Tagline as a header
+st.title("✨ Gold Price Predictor")
+st.subheader("Forecast tomorrow’s gold price with data‑driven insights.")
 
-adsense_code = """
-<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9614544934238374"
-     crossorigin="anonymous"></script>
-"""
+# Full description as markdown
+st.markdown("""
+Stay ahead of the market with our **Gold Price Predictor** — a smart tool that analyzes historical price movements and technical indicators to forecast the next trading day’s gold close.  
 
-st.markdown(adsense_code, unsafe_allow_html=True)
+By combining past trends with machine‑learning insights, it helps you spot potential shifts in direction, compare predicted vs. actual prices, and track accuracy over time.  
+
+Whether you’re an investor, trader, or simply curious about the world’s most trusted safe‑haven asset, this predictor gives you a quick, data‑driven glimpse into where gold might be heading next.
+""")
 
 cloud_provider = CloudProvider.GCP
 
@@ -57,3 +61,18 @@ st.dataframe(forecast_df, use_container_width=True)
 
 csv = forecast_df.to_csv(index=False).encode("utf-8")
 st.download_button("📥 Download CSV Report", data=csv, file_name="sx5e_prediction_report.csv", mime="text/csv")
+
+adsense_code = """
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9614544934238374"
+     crossorigin="anonymous"></script>
+"""
+
+st.markdown(adsense_code, unsafe_allow_html=True)
+
+st.markdown("""
+---
+### 📌 Disclaimer
+*The Gold Price Predictor is provided for informational and educational purposes only.  
+The forecasts shown are generated from historical data and machine‑learning models, and there is **no guarantee of accuracy or future performance**.  
+This tool should not be considered financial advice, and users should make investment decisions at their own discretion.*
+""")
