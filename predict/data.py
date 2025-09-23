@@ -121,7 +121,6 @@ class Predictor:
             "Date": past_dates,
             "Predicted_Close": np.round(preds, 2)
         })
-        past_df.dropna(inplace=True)
         past_df["Symbol"] = self.symbol
         #past_df["Created_at"] = pd.Timestamp.today().date()
 
@@ -132,7 +131,6 @@ class Predictor:
             "Predicted_Close": np.round(future_preds, 2)
         })
         forecast_df["Symbol"] = self.symbol
-        #forecast_df["Created_at"] = pd.Timestamp.today().date()
         return forecast_df, past_df, df
 
     def store_predictions(self, forecast_df):
@@ -160,6 +158,8 @@ class Predictor:
         merged.drop(columns=["id_y"], inplace=True)
 
         new_rows = merged[merged["_merge"] == "left_only"].drop(columns=["_merge"])
+
+        new_rows.dropna(subset=["Real_Close"], inplace=True)
 
         if not new_rows.empty:
             table_ref = f"{self.project_id}.{self.dataset_id}.{self.table_id}"
