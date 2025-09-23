@@ -159,7 +159,7 @@ class Predictor:
 
         new_rows = merged[merged["_merge"] == "left_only"].drop(columns=["_merge"])
 
-        new_rows.dropna(subset=["Real_Close"], inplace=True)
+        new_rows.dropna(inplace=True)
 
         if not new_rows.empty:
             table_ref = f"{self.project_id}.{self.dataset_id}.{self.table_id}"
