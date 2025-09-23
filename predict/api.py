@@ -26,6 +26,14 @@ def store_predictions(symbol: str = Query(...)):
     predict_obj.store_predictions(past_df)
     print(f"Stored Past Predictions for {symbol} in BigQuery.")
 
+    query = f"""
+            DELETE FROM `{predict_obj.project_id}.{predict_obj.dataset_id}.{predict_obj.table_id}`
+            WHERE Real_Close is null
+        """
+    # Run the query to remove records where no Real_Close value exists
+    job = predict_obj.client.query(query)
+    job.result()
+
     predict_obj.store_predictions(forecast_df)
     print(f"Stored Future Predictions for {symbol} in BigQuery.")
 
