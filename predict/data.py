@@ -122,7 +122,7 @@ class Predictor:
             "Predicted_Close": np.round(preds, 2)
         })
         past_df["Symbol"] = self.symbol
-        past_df["Created_at"] = pd.Timestamp.today().date()
+        #past_df["Created_at"] = pd.Timestamp.today().date()
 
         future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=1, freq="B").strftime("%Y-%m-%d")
         forecast_df = pd.DataFrame({
@@ -131,27 +131,27 @@ class Predictor:
             "Predicted_Close": np.round(future_preds, 2)
         })
         forecast_df["Symbol"] = self.symbol
-        forecast_df["Created_at"] = pd.Timestamp.today().date()
+        #forecast_df["Created_at"] = pd.Timestamp.today().date()
         return forecast_df, past_df, df
 
     def store_predictions(self, forecast_df):
         print("Storing predictions in BigQuery...")
 
         query = f"""
-            SELECT id, Date, Created_at, Symbol
+            SELECT id, Date, Symbol
             FROM `{self.project_id}.{self.dataset_id}.{self.table_id}`
             """
         existing = self.client.query(query).to_dataframe()
 
         # Ensure only Date and Predicted_Close columns are present
-        forecast_df = forecast_df[["id", "Created_at", "Symbol", "Date", "Predicted_Close"]]
+        forecast_df = forecast_df[["id", "Symbol", "Date", "Predicted_Close"]]
         # Ensure Date column is of datetime.date type
         forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.date
-        forecast_df["Created_at"] = pd.to_datetime(forecast_df["Created_at"]).dt.date
+        #forecast_df["Created_at"] = pd.to_datetime(forecast_df["Created_at"]).dt.date
         # Merge and find new records
         merged = forecast_df.merge(
             existing,
-            on=["Date", "Created_at", "Symbol"],
+            on=["Date", "Symbol"],
             how="left",
             indicator=True
         )
@@ -169,7 +169,7 @@ class Predictor:
                     write_disposition="WRITE_APPEND",
                     schema=[
                         bigquery.SchemaField("id", "STRING"),
-                        bigquery.SchemaField("Created_at", "DATE"),
+                        #bigquery.SchemaField("Created_at", "DATE"),
                         bigquery.SchemaField("Symbol", "STRING"),
                         bigquery.SchemaField("Date", "DATE"),
                         bigquery.SchemaField("Predicted_Close", "FLOAT"),
@@ -233,10 +233,10 @@ class Predictor:
 
     def fetch_prediction_history(self):
         query = f"""
-            SELECT Date, Created_at, Symbol, Real_Close, Predicted_Close
+            SELECT Date, Symbol, Real_Close, Predicted_Close
             FROM `{self.project_id}.{self.dataset_id}.{self.table_id}`
             WHERE Symbol = @Symbol
-            ORDER BY Date DESC, Created_at DESC
+            ORDER BY Date DESC
         """
         print(f"Executing query: {query}")
         job_config = bigquery.QueryJobConfig(
@@ -246,7 +246,7 @@ class Predictor:
         )
         print(f"Query Job Config: {job_config}")
         df = self.client.query(query, job_config=job_config).to_dataframe()
-        df["Created_at"] = df["Created_at"].astype(str)
+        #df["Created_at"] = df["Created_at"].astype(str)
         df["Real_Close"] = df["Real_Close"].apply(lambda x: "NaN" if pd.isna(x) else x)
         # Compare each value with the previous day's value
         df["Real_Close"] = pd.to_numeric(df["Real_Close"], errors="coerce")
