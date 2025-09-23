@@ -8,6 +8,14 @@ from data import Predictor
 
 st.set_page_config(page_title="Gold Price Predictor", layout="centered")
 
+st.markdown(
+    """
+    <meta name="description" content="GoldPredicts – a machine learning powered gold price predictor. 
+    Forecast tomorrow’s gold close, track accuracy, and explore trends in the world’s most trusted safe-haven asset.">
+    """,
+    unsafe_allow_html=True
+)
+
 # Tagline as a header
 st.title("✨ Gold Price Predictor")
 st.subheader("Forecast tomorrow’s gold price with data‑driven insights.")
