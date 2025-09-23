@@ -1,3 +1,4 @@
+import datetime
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -28,15 +29,18 @@ predict_obj = Predictor(cloud_provider.project_id, cloud_provider.dataset_id, cl
 df, correct_direction_perc = predict_obj.fetch_prediction_history()
 df.index = df["Date"]
 df["Real_Close"] = pd.to_numeric(df["Real_Close"], errors="coerce")
-st.dataframe(df, use_container_width=True)
+st.dataframe(df, use_container_width=True)  
+
+csv_df = df.to_csv(index=False).encode("utf-8")
+st.download_button("📥 Download as CSV", data=csv_df, file_name=f"historical_gold_prediction_report_{datetime.datetime.now()}.csv", mime="text/csv")
 
 st.metric(label="Correct Direction (%)", value=f"{correct_direction_perc:.2f}")
 
 # Plot with dates on x-axis
-actual = df["Real_Close"].head(10).values
-preds = df["Predicted_Close"].head(10).values
+actual = df["Real_Close"].head(100).values
+preds = df["Predicted_Close"].head(100).values
 future_preds = df["Predicted_Close"].head(1).values
-dates = pd.to_datetime(df["Date"].head(10))
+dates = pd.to_datetime(df["Date"].head(100))
 future_date = pd.to_datetime(df["Date"].head(1)).values[0]
 
 st.subheader("Actual vs. Predicted & 1-Day Forecast")
@@ -60,7 +64,7 @@ forecast_df = pd.DataFrame({
 st.dataframe(forecast_df, use_container_width=True)
 
 csv = forecast_df.to_csv(index=False).encode("utf-8")
-st.download_button("📥 Download CSV Report", data=csv, file_name="sx5e_prediction_report.csv", mime="text/csv")
+st.download_button("📥 Download as CSV", data=csv, file_name="future_gold_prediction_report.csv", mime="text/csv")
 
 adsense_code = """
 <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-9614544934238374"

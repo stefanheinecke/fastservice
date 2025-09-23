@@ -121,6 +121,7 @@ class Predictor:
             "Date": past_dates,
             "Predicted_Close": np.round(preds, 2)
         })
+        past_df.dropna(inplace=True)
         past_df["Symbol"] = self.symbol
         #past_df["Created_at"] = pd.Timestamp.today().date()
 
