@@ -75,13 +75,16 @@ class Predictor:
         initializer = tf.keras.initializers.GlorotUniform(seed=SEED)
 
         model = tf.keras.models.Sequential([
-            tf.keras.layers.Dense(256, activation="relu", kernel_initializer=initializer, input_shape=(X.shape[1],)),
-            tf.keras.layers.Dense(128, activation="relu", kernel_initializer=initializer),
-            tf.keras.layers.Dense(1, kernel_initializer=initializer)
+            tf.keras.layers.Reshape((window_size, -1), input_shape=(X.shape[1],)),  # reshape to 3D
+            tf.keras.layers.LSTM(128, return_sequences=False),
+            tf.keras.layers.BatchNormalization(),
+            tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.Dense(256, activation="relu"),
+            tf.keras.layers.Dense(1)
         ])
 
         model.compile(optimizer="adam", loss="mse", metrics=["mae"])
-        model.fit(X_train, y_train, epochs=10, batch_size=16, verbose=0)
+        model.fit(X_train, y_train, epochs=100, batch_size=16, verbose=0)
 
         # Evaluation
         loss, mae = model.evaluate(X_test, y_test, verbose=0)
@@ -92,6 +95,14 @@ class Predictor:
         rmse = np.sqrt(mean_squared_error(y_true, y_pred))
         mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
         direction_acc = np.mean((np.diff(y_true) > 0) == (np.diff(y_pred) > 0))
+
+        print(f"Evaluation Metrics for {self.symbol}:")
+        print(f" - Scaled Loss (MSE): {loss:.4f}")
+        print(f" - Scaled MAE: {mae:.4f}")
+        print(f" - Real MAE: {real_mae:.4f}")
+        print(f" - RMSE: {rmse:.4f}")
+        print(f" - MAPE: {mape:.2f}%")
+        print(f" - Directional Accuracy: {direction_acc:.2f}")
 
         # Rolling predictions
         preds = []
@@ -252,13 +263,13 @@ class Predictor:
         # Compare each value with the previous day's value
         df["Real_Close"] = pd.to_numeric(df["Real_Close"], errors="coerce")
         df["Predicted_Close"] = pd.to_numeric(df["Predicted_Close"], errors="coerce")
-        df["Real_Close_diff"] = df["Real_Close"].diff()
-        df["Predicted_Close_diff"] = df["Predicted_Close"].diff()
+        df["Real_Close_diff"] = df["Real_Close"] - df["Real_Close"].shift(-1)
+        df["Predicted_Close_diff"] = df["Predicted_Close"] - df["Predicted_Close"].shift(-1)
 
         # Condition: both increasing OR both decreasing
         df["Correct_Direction"] = ((df["Real_Close_diff"] > 0) & (df["Predicted_Close_diff"] > 0)) | \
                 ((df["Real_Close_diff"] < 0) & (df["Predicted_Close_diff"] < 0))
-        df.drop(columns=["Real_Close_diff", "Predicted_Close_diff"], inplace=True)
+        #df.drop(columns=["Real_Close_diff", "Predicted_Close_diff"], inplace=True)
         print(f"Fetched prediction history for {self.symbol}:\n{df}")
         correct_direction = df["Correct_Direction"].sum()
         correct_direction_perc = correct_direction / len(df) * 100 if len(df) > 0 else 0
