@@ -12,6 +12,11 @@ from sklearn.metrics import mean_squared_error
 from google.cloud import bigquery
 import matplotlib.pyplot as plt
 
+# from tensorflow.keras.models import Sequential
+# from tensorflow.keras.layers import Dense, Dropout, BatchNormalization, Bidirectional, LSTM, Reshape
+# from tensorflow.keras.callbacks import EarlyStopping
+# from tensorflow.keras.initializers import GlorotUniform
+
 # Fix randomness
 SEED = 42
 random.seed(SEED)
@@ -72,19 +77,52 @@ class Predictor:
         X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=SEED)
 
         # Model
+        # initializer = tf.keras.initializers.GlorotUniform(seed=SEED)
+
+        # model = tf.keras.models.Sequential([
+        #     tf.keras.layers.Reshape((window_size, -1), input_shape=(X.shape[1],)),  # reshape to 3D
+        #     tf.keras.layers.LSTM(128, return_sequences=False),
+        #     tf.keras.layers.BatchNormalization(),
+        #     tf.keras.layers.Dropout(0.2),
+        #     tf.keras.layers.Dense(256, activation="relu"),
+        #     tf.keras.layers.Dense(1)
+        # ])
+
+        # model.compile(optimizer="adam", loss="mse", metrics=["mae"])
+        # model.fit(X_train, y_train, epochs=40, batch_size=16, verbose=0)
+
         initializer = tf.keras.initializers.GlorotUniform(seed=SEED)
 
         model = tf.keras.models.Sequential([
-            tf.keras.layers.Reshape((window_size, -1), input_shape=(X.shape[1],)),  # reshape to 3D
-            tf.keras.layers.LSTM(128, return_sequences=False),
+            tf.keras.layers.Reshape((window_size, -1), input_shape=(X.shape[1],)),  # Reshape to 3D for LSTM
+            tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(64, return_sequences=True, kernel_initializer=initializer)),
+            tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=False, kernel_initializer=initializer)),
             tf.keras.layers.BatchNormalization(),
-            tf.keras.layers.Dropout(0.2),
-            tf.keras.layers.Dense(256, activation="relu"),
-            tf.keras.layers.Dense(1)
+            tf.keras.layers.Dropout(0.3),
+            tf.keras.layers.Dense(256, activation="relu", kernel_initializer=initializer),
+            tf.keras.layers.Dense(1, kernel_initializer=initializer)  # Output: predicted price
         ])
 
-        model.compile(optimizer="adam", loss="mse", metrics=["mae"])
-        model.fit(X_train, y_train, epochs=40, batch_size=16, verbose=0)
+        model.compile(
+            optimizer="adam",
+            loss="mse",
+            metrics=["mae"]
+        )
+
+        early_stop = tf.keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=10,
+            restore_best_weights=True
+        )
+
+        model.fit(
+            X_train, y_train,
+            epochs=40,
+            batch_size=32,
+            validation_split=0.2,
+            callbacks=[early_stop],
+            verbose=1
+        )
 
         # Evaluation
         loss, mae = model.evaluate(X_test, y_test, verbose=0)
