@@ -69,12 +69,12 @@ jobs:
             --image=${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/api:$GITHUB_SHA \
             --platform=managed \
             --region=${{ secrets.GCP_REGION }} \
-            --memory=1Gi \
+            --memory=2Gi \
             --allow-unauthenticated
           
           gcloud run deploy streamlit-service \
             --image=${{ secrets.GCP_ARTIFACT_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_REPOSITORY }}/streamlit:$GITHUB_SHA \
             --platform=managed \
             --region=${{ secrets.GCP_REGION }} \
-            --memory=1Gi \
+            --memory=2Gi \
             --allow-unauthenticated 
