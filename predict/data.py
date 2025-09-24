@@ -84,7 +84,7 @@ class Predictor:
         ])
 
         model.compile(optimizer="adam", loss="mse", metrics=["mae"])
-        model.fit(X_train, y_train, epochs=50, batch_size=16, verbose=0)
+        model.fit(X_train, y_train, epochs=40, batch_size=16, verbose=0)
 
         # Evaluation
         loss, mae = model.evaluate(X_test, y_test, verbose=0)

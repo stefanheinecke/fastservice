@@ -31,6 +31,8 @@ def show_predictions():
     Whether you’re an investor, trader, or simply curious about the world’s most trusted safe‑haven asset, this predictor gives you a quick, data‑driven glimpse into where gold might be heading next.
     """)
 
+    st.markdown("---")
+
     cloud_provider = CloudProvider.GCP
 
     symbol = "GC=F"
