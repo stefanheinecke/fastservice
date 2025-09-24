@@ -8,8 +8,6 @@ from data import Predictor
 
 def show_predictions():
 
-    st.set_page_config(page_title="Gold Price Predictor", layout="centered")
-
     st.markdown(
         """
         <meta name="description" content="GoldPredicts – a machine learning powered gold price predictor. 
@@ -31,6 +29,8 @@ def show_predictions():
     Whether you’re an investor, trader, or simply curious about the world’s most trusted safe‑haven asset, this predictor gives you a quick, data‑driven glimpse into where gold might be heading next.
     """)
 
+    st.markdown("---")
+
     cloud_provider = CloudProvider.GCP
 
     symbol = "GC=F"
@@ -40,9 +40,9 @@ def show_predictions():
     df.index = df["Date"]
     df["Real_Close"] = pd.to_numeric(df["Real_Close"], errors="coerce")
     
-    st.dataframe(df, use_container_width=True)  
-
     st.metric(label="Correct Direction (%)", value=f"{correct_direction_perc:.2f}")
+
+    st.dataframe(df, use_container_width=True)  
 
     csv_df = df.to_csv(index=False).encode("utf-8")
     st.download_button("📥 Download as CSV", data=csv_df, file_name=f"historical_gold_prediction_report_{datetime.datetime.now()}.csv", mime="text/csv")

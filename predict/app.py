@@ -1,6 +1,8 @@
 import streamlit as st
 from predictions import show_predictions
 
+st.set_page_config(page_title="Gold Price Predictor", layout="centered")
+
 def show_about():
     st.title("About")
     st.write(
