@@ -31,8 +31,6 @@ def show_predictions():
     Whether you’re an investor, trader, or simply curious about the world’s most trusted safe‑haven asset, this predictor gives you a quick, data‑driven glimpse into where gold might be heading next.
     """)
 
-    st.markdown("---")
-
     cloud_provider = CloudProvider.GCP
 
     symbol = "GC=F"
@@ -41,8 +39,10 @@ def show_predictions():
     df, correct_direction_perc = predict_obj.fetch_prediction_history()
     df.index = df["Date"]
     df["Real_Close"] = pd.to_numeric(df["Real_Close"], errors="coerce")
-    st.metric(label="Correct Direction (%)", value=f"{correct_direction_perc:.2f}")
+    
     st.dataframe(df, use_container_width=True)  
+
+    st.metric(label="Correct Direction (%)", value=f"{correct_direction_perc:.2f}")
 
     csv_df = df.to_csv(index=False).encode("utf-8")
     st.download_button("📥 Download as CSV", data=csv_df, file_name=f"historical_gold_prediction_report_{datetime.datetime.now()}.csv", mime="text/csv")
