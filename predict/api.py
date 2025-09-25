@@ -19,7 +19,7 @@ def store_predictions(symbol: str = Query(...)):
 
     predict_obj = Predictor(cloud_provider.project_id, cloud_provider.dataset_id, cloud_provider.table_id, symbol)
     print(f"Storing predictions for {symbol}...")
-
+    
     forecast_df, past_df, df = predict_obj.create_predictions()
     print(f"Forecast DataFrame for {symbol}:\n{forecast_df}")
 
