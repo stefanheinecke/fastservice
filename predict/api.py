@@ -3,6 +3,7 @@ from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
 from data import Predictor
 from enums import CloudProvider
+import subprocess
 
 app = FastAPI()
 
@@ -19,7 +20,7 @@ def store_predictions(symbol: str = Query(...)):
 
     predict_obj = Predictor(cloud_provider.project_id, cloud_provider.dataset_id, cloud_provider.table_id, symbol)
     print(f"Storing predictions for {symbol}...")
-    
+
     forecast_df, past_df, df = predict_obj.create_predictions()
     print(f"Forecast DataFrame for {symbol}:\n{forecast_df}")
 
@@ -32,6 +33,15 @@ def store_predictions(symbol: str = Query(...)):
     predict_obj.update_with_real_close(df)
 
     return JSONResponse(content={"message": "Predictions stored successfully."})
+
+@app.post("/trigger-job")
+def trigger_job():
+    subprocess.Popen([
+        "gcloud", "run", "jobs", "execute", "prediction-job",
+        "--region", "europe-west1",
+        "--format", "json"
+    ])
+    return {"status": "Job triggered"}
 
 @app.get("/predictions")
 def prediction_history(
