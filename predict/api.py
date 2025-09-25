@@ -34,7 +34,7 @@ def store_predictions(symbol: str = Query(...)):
 
     return JSONResponse(content={"message": "Predictions stored successfully."})
 
-@app.post("/trigger-job")
+@app.get("/trigger-job")
 def trigger_job():
     subprocess.Popen([
         "gcloud", "run", "jobs", "execute", "prediction-job",
