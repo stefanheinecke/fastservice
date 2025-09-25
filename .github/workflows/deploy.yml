@@ -84,5 +84,5 @@ jobs:
             --region=europe-west1 \
             --memory=2Gi \
             --cpu=2 \
-            --timeout=3600s \
+            --task-timeout=3600s \
             --max-retries=0
