@@ -95,11 +95,11 @@ class Predictor:
 
         model = tf.keras.models.Sequential([
             tf.keras.layers.Reshape((window_size, -1), input_shape=(X.shape[1],)),  # Reshape to 3D for LSTM
-            tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(64, return_sequences=True, kernel_initializer=initializer)),
-            tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=False, kernel_initializer=initializer)),
+            tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(128, return_sequences=True, kernel_initializer=initializer)),
+            tf.keras.layers.Bidirectional(tf.keras.layers.LSTM(256, return_sequences=False, kernel_initializer=initializer)),
             tf.keras.layers.BatchNormalization(),
             tf.keras.layers.Dropout(0.3),
-            tf.keras.layers.Dense(256, activation="relu", kernel_initializer=initializer),
+            tf.keras.layers.Dense(512, activation="relu", kernel_initializer=initializer),
             tf.keras.layers.Dense(1, kernel_initializer=initializer)  # Output: predicted price
         ])
 
@@ -117,7 +117,7 @@ class Predictor:
 
         model.fit(
             X_train, y_train,
-            epochs=40,
+            epochs=100,
             batch_size=32,
             validation_split=0.2,
             callbacks=[early_stop],
