@@ -117,7 +117,7 @@ class Predictor:
 
         model.fit(
             X_train, y_train,
-            epochs=20,
+            epochs=200,
             batch_size=8,
             validation_split=0.2,
             callbacks=[early_stop],
