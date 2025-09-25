@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from data import Predictor
 from enums import CloudProvider
 import subprocess
+from google.cloud import run_v2
 
 app = FastAPI()
 
@@ -36,12 +37,20 @@ def store_predictions(symbol: str = Query(...)):
 
 @app.get("/trigger-job")
 def trigger_job():
-    subprocess.Popen([
-        "gcloud", "run", "jobs", "execute", "prediction-job",
-        "--region", "europe-west1",
-        "--format", "json"
-    ])
-    return {"status": "Job triggered"}
+    client = run_v2.JobsClient()
+
+    # Initialize request argument(s)
+    request = run_v2.RunJobRequest(
+        name="prediction-job",
+    )
+
+    # Make the request
+    operation = client.run_job(request=request)
+
+    print("Waiting for operation to complete...")
+
+    response = operation.result()
+    print("Job executed successfully:", response)
 
 @app.get("/predictions")
 def prediction_history(
