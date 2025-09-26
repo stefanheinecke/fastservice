@@ -4,11 +4,6 @@ from predictions import show_predictions
 
 st.set_page_config(page_title="Gold Price Predictor", layout="centered")
 
-
-if st.request.path == "/robots.txt":
-    st.text(open("robots.txt").read())
-
-
 def show_about():
     st.title("About")
     st.write(
