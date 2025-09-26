@@ -91,21 +91,21 @@ class Predictor:
         model.compile(optimizer="adam", loss="mse", metrics=["mae"])
         model.fit(X_train, y_train, epochs=40, batch_size=16, verbose=0)
 
-        initializer = tf.keras.initializers.GlorotUniform(seed=SEED)
+        # initializer = tf.keras.initializers.GlorotUniform(seed=SEED)
 
-        model = tf.keras.models.Sequential([
-            tf.keras.layers.Reshape((window_size, -1), input_shape=(X.shape[1],)),  # Reshape to 3D for LSTM
-            tf.keras.layers.LSTM(128, return_sequences=False, kernel_initializer=initializer),
-            tf.keras.layers.BatchNormalization(),
-            tf.keras.layers.Dropout(0.2),
-            tf.keras.layers.Dense(256, activation="relu", kernel_initializer=initializer),
-            tf.keras.layers.Dense(1, kernel_initializer=initializer)  # Output: predicted price
-        ])
+        # model = tf.keras.models.Sequential([
+        #     tf.keras.layers.Reshape((window_size, -1), input_shape=(X.shape[1],)),  # Reshape to 3D for LSTM
+        #     tf.keras.layers.LSTM(128, return_sequences=False, kernel_initializer=initializer),
+        #     tf.keras.layers.BatchNormalization(),
+        #     tf.keras.layers.Dropout(0.2),
+        #     tf.keras.layers.Dense(256, activation="relu", kernel_initializer=initializer),
+        #     tf.keras.layers.Dense(1, kernel_initializer=initializer)  # Output: predicted price
+        # ])
 
-        model.compile(
-            optimizer="adam",
-            loss="mse",
-            metrics=["mae"]
+        # model.compile(
+        #     optimizer="adam",
+        #     loss="mse",
+        #     metrics=["mae"]
         # )
 
         # early_stop = tf.keras.callbacks.EarlyStopping(
