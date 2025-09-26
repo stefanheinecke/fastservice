@@ -77,19 +77,19 @@ class Predictor:
         X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=SEED)
 
         # Model
-        # initializer = tf.keras.initializers.GlorotUniform(seed=SEED)
+        initializer = tf.keras.initializers.GlorotUniform(seed=SEED)
 
-        # model = tf.keras.models.Sequential([
-        #     tf.keras.layers.Reshape((window_size, -1), input_shape=(X.shape[1],)),  # reshape to 3D
-        #     tf.keras.layers.LSTM(128, return_sequences=False),
-        #     tf.keras.layers.BatchNormalization(),
-        #     tf.keras.layers.Dropout(0.2),
-        #     tf.keras.layers.Dense(256, activation="relu"),
-        #     tf.keras.layers.Dense(1)
-        # ])
+        model = tf.keras.models.Sequential([
+            tf.keras.layers.Reshape((window_size, -1), input_shape=(X.shape[1],)),  # reshape to 3D
+            tf.keras.layers.LSTM(128, return_sequences=False),
+            tf.keras.layers.BatchNormalization(),
+            tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.Dense(256, activation="relu"),
+            tf.keras.layers.Dense(1)
+        ])
 
-        # model.compile(optimizer="adam", loss="mse", metrics=["mae"])
-        # model.fit(X_train, y_train, epochs=40, batch_size=16, verbose=0)
+        model.compile(optimizer="adam", loss="mse", metrics=["mae"])
+        model.fit(X_train, y_train, epochs=40, batch_size=16, verbose=0)
 
         initializer = tf.keras.initializers.GlorotUniform(seed=SEED)
 
@@ -106,22 +106,22 @@ class Predictor:
             optimizer="adam",
             loss="mse",
             metrics=["mae"]
-        )
+        # )
 
-        early_stop = tf.keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            patience=10,
-            restore_best_weights=True
-        )
+        # early_stop = tf.keras.callbacks.EarlyStopping(
+        #     monitor="val_loss",
+        #     patience=10,
+        #     restore_best_weights=True
+        # )
 
-        model.fit(
-            X_train, y_train,
-            epochs=10,
-            batch_size=16,
-            validation_split=0.2,
-            callbacks=[early_stop],
-            verbose=0
-        )
+        # model.fit(
+        #     X_train, y_train,
+        #     epochs=10,
+        #     batch_size=16,
+        #     validation_split=0.2,
+        #     callbacks=[early_stop],
+        #     verbose=0
+        # )
 
         # Evaluation
         loss, mae = model.evaluate(X_test, y_test, verbose=0)
