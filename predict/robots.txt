@@ -1,7 +1,0 @@
-User-agent: *
-Disallow: /admin/
-Disallow: /api/
-Disallow: /private/
-Allow: /
-
-Sitemap: https://goldpredicts.com/sitemap.xml

@@ -1,6 +1,6 @@
 import data
 from fastapi import FastAPI, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from data import Predictor
 from enums import CloudProvider
 import subprocess
@@ -9,7 +9,11 @@ from google.cloud import run_v2
 app = FastAPI()
 
 cloud_provider = CloudProvider.GCP
-    
+
+@app.get("/robots.txt")
+def robots():
+    return FileResponse("robots.txt", media_type="text/plain")
+
 @app.get("/history")
 def get_history(symbol: str = Query(...)):
     history_df = data.load_data(symbol)
