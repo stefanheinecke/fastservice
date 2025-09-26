@@ -163,7 +163,7 @@ class Predictor:
             latest_window = np.vstack((latest_window[1:], last_day.values))
 
         # 🧮 Display 1-Day Forecasted Price
-        past_dates = pd.date_range(start=df.index[-window_size] + pd.Timedelta(days=1), periods=window_size, freq="B").strftime("%Y-%m-%d")
+        past_dates = pd.date_range(end=df.index[-1], periods=window_size, freq="B").strftime("%Y-%m-%d")
         past_df = pd.DataFrame({
             "id": [str(uuid.uuid4()) for _ in range(window_size)],    
             "Date": past_dates,
