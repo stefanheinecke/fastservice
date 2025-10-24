@@ -29,6 +29,12 @@ jobs:
             -t ${{ secrets.ACR_NAME }}.azurecr.io/api:$GITHUB_SHA
           docker push ${{ secrets.ACR_NAME }}.azurecr.io/api:$GITHUB_SHA
 
+      - name: Build and Push Streamlit image
+        run: |
+          docker build -f predict/Dockerfile.streamlit predict/ \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/streamlit:$GITHUB_SHA
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/streamlit:$GITHUB_SHA
+
   deploy:
     name: Deploy to Azure Container Apps
     needs: build
@@ -46,3 +52,10 @@ jobs:
           containerAppName: containerapp1
           resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
           imageToDeploy: ${{ secrets.ACR_NAME }}.azurecr.io/api:$GITHUB_SHA
+
+      - name: Deploy Streamlit Container App
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: containerstreamlit
+          resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          imageToDeploy: ${{ secrets.ACR_NAME }}.azurecr.io/streamlit:$GITHUB_SHA
