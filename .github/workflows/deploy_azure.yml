@@ -31,7 +31,7 @@ jobs:
 
       - name: Build and Push Streamlit image
         run: |
-          docker build -f predict/Dockerfile.streamlit predict/ \
+          docker build -f predict/Dockerfile.Azure.streamlit predict/ \
             -t ${{ secrets.ACR_NAME }}.azurecr.io/streamlit:$GITHUB_SHA
           docker push ${{ secrets.ACR_NAME }}.azurecr.io/streamlit:$GITHUB_SHA
 
