@@ -1,0 +1,74 @@
+name: Build and Deploy to Azure Container Apps
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Set up Docker for ACR
+        run: |
+          az acr login --name ${{ secrets.ACR_NAME }}
+
+      - name: Build and Push API image
+        run: |
+          docker build -f predict/Dockerfile.api predict/ \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/api:$GITHUB_SHA
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/api:$GITHUB_SHA
+
+      - name: Build and Push Streamlit image
+        run: |
+          docker build -f predict/Dockerfile.streamlit predict/ \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/streamlit:$GITHUB_SHA
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/streamlit:$GITHUB_SHA
+
+      - name: Build and Push Job image
+        run: |
+          docker build -f predict/Dockerfile.job predict/ \
+            -t ${{ secrets.ACR_NAME }}.azurecr.io/job-image:$GITHUB_SHA
+          docker push ${{ secrets.ACR_NAME }}.azurecr.io/job-image:$GITHUB_SHA
+
+  deploy:
+    name: Deploy to Azure Container Apps
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Deploy API Container App
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: api-service
+          resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          imageToDeploy: ${{ secrets.ACR_NAME }}.azurecr.io/api:$GITHUB_SHA
+
+      - name: Deploy Streamlit Container App
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: streamlit-service
+          resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          imageToDeploy: ${{ secrets.ACR_NAME }}.azurecr.io/streamlit:$GITHUB_SHA
+
+      - name: Deploy Job Container App
+        uses: azure/container-apps-deploy-action@v1
+        with:
+          containerAppName: prediction-job
+          resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          imageToDeploy: ${{ secrets.ACR_NAME }}.azurecr.io/job-image:$GITHUB_SHA
