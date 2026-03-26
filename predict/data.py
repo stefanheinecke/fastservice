@@ -244,13 +244,14 @@ class Predictor:
         update_stmt = text(f"""
             UPDATE {self.TABLE_NAME}
             SET real_close = :real_close
-            WHERE date = :date
+            WHERE date = :date AND symbol = :symbol
         """)
 
         with self.engine.begin() as conn:
             for _, row in real_close_df.iterrows():
                 conn.execute(update_stmt, {"real_close": float(row["real_close"]),
-                                           "date": row["date"]})
+                                           "date": row["date"],
+                                           "symbol": self.symbol})
 
         print("real_close column updated for matching dates.")
 
