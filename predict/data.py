@@ -155,9 +155,10 @@ class Predictor:
         print(f" - MAPE: {mape:.2f}%")
         print(f" - Directional Accuracy: {direction_acc:.2f}")
 
-        # Rolling predictions
+        # Rolling predictions over all available data (after the initial training window)
+        num_predictions = len(df) - window_size
         preds = []
-        for i in range(-window_size, 0):
+        for i in range(-num_predictions, 0):
             w = df.iloc[i - window_size:i].values.flatten().reshape(1, -1)
             ws = X_scaler.transform(w)
             p = model.predict(ws)
@@ -177,9 +178,9 @@ class Predictor:
             latest_window = np.vstack((latest_window[1:], last_day.values))
 
         # 🧮 Display 1-Day Forecasted Price
-        past_dates = pd.date_range(end=df.index[-1], periods=window_size, freq="B").strftime("%Y-%m-%d")
+        past_dates = pd.date_range(end=df.index[-1], periods=num_predictions, freq="B").strftime("%Y-%m-%d")
         past_df = pd.DataFrame({
-            "id": [str(uuid.uuid4()) for _ in range(window_size)],    
+            "id": [str(uuid.uuid4()) for _ in range(num_predictions)],    
             "Date": past_dates,
             "Predicted_Close": np.round(preds, 2)
         })
@@ -277,4 +278,7 @@ class Predictor:
 
         correct_direction = df["Correct_Direction"].sum()
         correct_direction_perc = correct_direction / len(df) * 100 if len(df) > 0 else 0
-        return df, correct_direction_perc
+
+        mae = float(np.mean(np.abs(df["Real_Close"] - df["Predicted_Close"]))) if len(df) > 0 else 0
+
+        return df, correct_direction_perc, mae

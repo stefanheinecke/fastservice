@@ -131,9 +131,15 @@
     <div id="error" class="error-msg"></div>
     <div id="pred-content" style="display:none">
 
-      <div class="metric-card">
-        <div class="label">Correct Direction</div>
-        <div class="value" id="dir-pct"></div>
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem">
+        <div class="metric-card">
+          <div class="label">Correct Direction</div>
+          <div class="value" id="dir-pct"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Mean Absolute Error</div>
+          <div class="value" id="mae"></div>
+        </div>
       </div>
 
       <div class="card">
@@ -229,6 +235,7 @@
       const data = await res.json();
 
       document.getElementById("dir-pct").textContent = data.correct_direction_pct + "%";
+      document.getElementById("mae").textContent = "$" + data.mae;
 
       const tbody = document.getElementById("pred-body");
       data.rows.forEach(r => {

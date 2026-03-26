@@ -33,12 +33,13 @@ def index():
 @app.route("/api/predictions")
 def api_predictions():
     predictor = _get_predictor()
-    df, correct_direction_perc = predictor.fetch_prediction_history()
+    df, correct_direction_perc, mae = predictor.fetch_prediction_history()
     df["Date"] = df["Date"].astype(str)
     # Replace NaN/None so JSON serialization doesn't produce invalid tokens
     rows = json.loads(df.to_json(orient="records"))
     return _json_response({
         "correct_direction_pct": round(correct_direction_perc, 2),
+        "mae": round(mae, 2),
         "rows": rows,
     })
 
@@ -46,7 +47,7 @@ def api_predictions():
 @app.route("/api/download")
 def download_csv():
     predictor = _get_predictor()
-    df, _ = predictor.fetch_prediction_history()
+    df, _, _ = predictor.fetch_prediction_history()
     buf = io.BytesIO(df.to_csv(index=False).encode("utf-8"))
     filename = f"gold_prediction_report_{datetime.date.today()}.csv"
     return send_file(buf, mimetype="text/csv", as_attachment=True,
