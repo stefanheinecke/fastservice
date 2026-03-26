@@ -1,9 +1,11 @@
 import io
 import os
+import json
 import datetime
 
+import numpy as np
 import pandas as pd
-from flask import Flask, jsonify, render_template, send_file
+from flask import Flask, render_template, send_file, Response
 from data import Predictor
 
 app = Flask(__name__)
@@ -16,7 +18,10 @@ def _get_predictor():
     return Predictor(DATABASE_URL, SYMBOL)
 
 
-# -- Pages --
+def _json_response(data):
+    """Serialize to JSON, converting NaN/Infinity to null."""
+    body = json.dumps(data, default=str, allow_nan=False)
+    return Response(body, mimetype="application/json")
 
 @app.route("/")
 def index():
@@ -30,10 +35,11 @@ def api_predictions():
     predictor = _get_predictor()
     df, correct_direction_perc = predictor.fetch_prediction_history()
     df["Date"] = df["Date"].astype(str)
-    df = df.where(df.notna(), None)
-    return jsonify({
+    # Replace NaN/None so JSON serialization doesn't produce invalid tokens
+    rows = json.loads(df.to_json(orient="records"))
+    return _json_response({
         "correct_direction_pct": round(correct_direction_perc, 2),
-        "rows": df.to_dict(orient="records"),
+        "rows": rows,
     })
 
 
@@ -54,7 +60,7 @@ def store_predictions():
     predictor.store_predictions(past_df)
     predictor.store_predictions(forecast_df)
     predictor.update_with_real_close(df)
-    return jsonify({"message": "Predictions stored successfully."})
+    return _json_response({"message": "Predictions stored successfully."})
 
 
 @app.route("/robots.txt")
