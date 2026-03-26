@@ -1,0 +1,25 @@
+<<<<<<< HEAD:streamlit-hello/requirements.txt
+flask
+gunicorn
+=======
+streamlit==1.35.0
+uuid
+fastapi
+uvicorn
+httpx
+>>>>>>> 3efbeb2aa3814543b708687c1a10f733df0ed468:predict/requirements.txt
+tensorflow
+ta
+plotly
+yfinance
+matplotlib
+scikit-learn
+pandas
+<<<<<<< HEAD:streamlit-hello/requirements.txt
+numpy
+=======
+numpy
+google-cloud-bigquery[pandas]
+db-dtypes
+google-cloud-run
+>>>>>>> 3efbeb2aa3814543b708687c1a10f733df0ed468:predict/requirements.txt
