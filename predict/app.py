@@ -30,6 +30,7 @@ def api_predictions():
     predictor = _get_predictor()
     df, correct_direction_perc = predictor.fetch_prediction_history()
     df["Date"] = df["Date"].astype(str)
+    df = df.where(df.notna(), None)
     return jsonify({
         "correct_direction_pct": round(correct_direction_perc, 2),
         "rows": df.to_dict(orient="records"),

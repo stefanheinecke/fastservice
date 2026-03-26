@@ -259,6 +259,7 @@ class Predictor:
                    real_close AS "Real_Close", predicted_close AS "Predicted_Close"
             FROM {self.TABLE_NAME}
             WHERE symbol = :symbol
+              AND real_close IS NOT NULL
             ORDER BY date DESC
         """)
         with self.engine.connect() as conn:
