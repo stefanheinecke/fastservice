@@ -96,6 +96,14 @@
       text-align: center; display: none;
     }
 
+    /* Range buttons */
+    .range-btn {
+      background: var(--surface); border: 1px solid var(--border); color: var(--muted);
+      padding: .45rem 1rem; border-radius: 6px; font-size: .85rem; cursor: pointer; transition: all .2s;
+    }
+    .range-btn:hover { color: var(--text); border-color: var(--accent); }
+    .range-btn.active { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
+
     /* About, Contact, Privacy text */
     .prose { color: var(--muted); line-height: 1.8; max-width: 720px; }
     .prose h3 { color: var(--text); margin-top: 1.5rem; margin-bottom: .5rem; }
@@ -117,20 +125,45 @@
 
   <!-- Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" data-tab="predictions">Predictions</button>
+    <button class="tab-btn active" data-tab="load-data">Load Data</button>
+    <button class="tab-btn" data-tab="predictions">Predictions</button>
     <button class="tab-btn" data-tab="about">About</button>
     <button class="tab-btn" data-tab="contact">Contact</button>
     <button class="tab-btn" data-tab="privacy">Privacy Policy</button>
   </div>
 
-  <!-- ==================== Predictions ==================== -->
-  <div id="predictions" class="tab-panel active">
-    <div id="loader">
-      <div class="spinner"></div>
-      <span style="color:var(--muted)">Loading prediction data&hellip;</span>
+  <!-- ==================== Load Data ==================== -->
+  <div id="load-data" class="tab-panel active">
+    <div class="card">
+      <h2>Load Prediction Data</h2>
+      <p style="color:var(--muted); margin-bottom:1.25rem">
+        Fetch all stored predictions from the server. Once loaded, switch to the
+        <strong style="color:var(--text)">Predictions</strong> tab to explore results.
+      </p>
+      <button id="load-btn" class="btn">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+        Load Data
+      </button>
+      <div id="load-status" style="margin-top:1rem"></div>
     </div>
-    <div id="error" class="error-msg"></div>
+  </div>
+
+  <!-- ==================== Predictions ==================== -->
+  <div id="predictions" class="tab-panel">
+    <div id="no-data-msg" class="card" style="text-align:center; color:var(--muted); padding:3rem">
+      No data loaded yet.&ensp;Go to the <strong style="color:var(--accent-light)">Load Data</strong> tab first.
+    </div>
     <div id="pred-content" style="display:none">
+
+      <!-- Time range selector -->
+      <div style="margin-bottom:1.5rem; display:flex; gap:.5rem; flex-wrap:wrap">
+        <button class="range-btn" data-days="90">3M</button>
+        <button class="range-btn" data-days="180">6M</button>
+        <button class="range-btn" data-days="365">1Y</button>
+        <button class="range-btn" data-days="730">2Y</button>
+        <button class="range-btn" data-days="1825">5Y</button>
+        <button class="range-btn active" data-days="0">All</button>
+      </div>
 
       <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem">
         <div class="metric-card">
@@ -231,27 +264,94 @@
     });
   });
 
-  /* ---------- Load predictions ---------- */
-  (async () => {
-    const loader  = document.getElementById("loader");
-    const content = document.getElementById("pred-content");
-    const errorEl = document.getElementById("error");
+  /* ---------- State ---------- */
+  let allRows    = null;   // cached server data (sorted newest-first)
+  let allMae     = null;
+  let allDirPct  = null;
+  let priceChart = null;
+
+  const loadBtn   = document.getElementById("load-btn");
+  const loadStatus = document.getElementById("load-status");
+  const noDataMsg = document.getElementById("no-data-msg");
+  const predContent = document.getElementById("pred-content");
+
+  /* ---------- Load Data (explicit user action) ---------- */
+  loadBtn.addEventListener("click", async () => {
+    loadBtn.disabled = true;
+    loadBtn.textContent = "Loading\u2026";
+    loadStatus.innerHTML = '<span style="color:var(--muted)">Fetching predictions from the server&hellip;</span>';
 
     try {
       const res = await fetch("/api/predictions");
       if (!res.ok) throw new Error("Server responded " + res.status);
       const data = await res.json();
 
-      document.getElementById("dir-pct").textContent = data.correct_direction_pct + "%";
-      document.getElementById("mae").textContent = "$" + data.mae;
+      allRows   = data.rows;          // newest-first from API
+      allMae    = data.mae;
+      allDirPct = data.correct_direction_pct;
 
-      /* ---------- Chart ---------- */
-      const sorted = [...data.rows].reverse();
-      const labels    = sorted.map(r => r.Date);
-      const realData  = sorted.map(r => r.Real_Close);
-      const predData  = sorted.map(r => r.Predicted_Close);
+      loadStatus.innerHTML =
+        '<span style="color:var(--green)">\u2714 Loaded ' + allRows.length +
+        ' predictions.</span><br><span style="color:var(--muted);font-size:.85rem">' +
+        'Switch to the <strong>Predictions</strong> tab to view results.</span>';
 
-      new Chart(document.getElementById("price-chart"), {
+      // Pre-render the Predictions tab with all data
+      noDataMsg.style.display  = "none";
+      predContent.style.display = "block";
+      displayData(0);
+    } catch (err) {
+      loadStatus.innerHTML =
+        '<span style="color:var(--red)">\u2716 Failed to load: ' + err.message + '</span>';
+    } finally {
+      loadBtn.disabled = false;
+      loadBtn.textContent = "Load Data";
+    }
+  });
+
+  /* ---------- Display / filter cached data ---------- */
+  function displayData(days) {
+    if (!allRows) return;
+
+    // Filter by days (0 = all)
+    let rows = allRows;
+    if (days > 0) {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - days);
+      rows = allRows.filter(r => new Date(r.Date) >= cutoff);
+    }
+
+    // Recalculate metrics for the visible window
+    let correctCount = 0, totalDir = 0, absErrorSum = 0, maeCount = 0;
+    rows.forEach(r => {
+      const dir = r.Correct_Direction;
+      if (dir === true || dir === 1 || dir === false || dir === 0) {
+        totalDir++;
+        if (dir === true || dir === 1) correctCount++;
+      }
+      if (r.Real_Close != null && !isNaN(r.Real_Close) && r.Predicted_Close != null) {
+        absErrorSum += Math.abs(r.Real_Close - r.Predicted_Close);
+        maeCount++;
+      }
+    });
+    const dirPct = totalDir > 0 ? (correctCount / totalDir * 100).toFixed(2) : "\u2014";
+    const mae    = maeCount > 0 ? (absErrorSum / maeCount).toFixed(2) : "\u2014";
+
+    document.getElementById("dir-pct").textContent = dirPct + (dirPct !== "\u2014" ? "%" : "");
+    document.getElementById("mae").textContent     = mae !== "\u2014" ? "$" + mae : "\u2014";
+
+    // Chart (chronological = reversed)
+    const sorted   = [...rows].reverse();
+    const labels   = sorted.map(r => r.Date);
+    const realData = sorted.map(r => r.Real_Close);
+    const predData = sorted.map(r => r.Predicted_Close);
+
+    if (priceChart) {
+      priceChart.data.labels = labels;
+      priceChart.data.datasets[0].data = realData;
+      priceChart.data.datasets[1].data = predData;
+      priceChart.update();
+    } else {
+      priceChart = new Chart(document.getElementById("price-chart"), {
         type: "line",
         data: {
           labels,
@@ -261,22 +361,14 @@
               data: realData,
               borderColor: "#e6e6e6",
               backgroundColor: "rgba(230,230,230,0.08)",
-              borderWidth: 2,
-              pointRadius: 0,
-              pointHitRadius: 6,
-              tension: 0.3,
-              fill: false,
+              borderWidth: 2, pointRadius: 0, pointHitRadius: 6, tension: 0.3, fill: false,
             },
             {
               label: "Predicted Close",
               data: predData,
               borderColor: "#d4a017",
               backgroundColor: "rgba(212,160,23,0.10)",
-              borderWidth: 2,
-              pointRadius: 0,
-              pointHitRadius: 6,
-              tension: 0.3,
-              fill: false,
+              borderWidth: 2, pointRadius: 0, pointHitRadius: 6, tension: 0.3, fill: false,
             }
           ]
         },
@@ -287,54 +379,47 @@
           plugins: {
             legend: { labels: { color: "#e6e6e6", font: { size: 13 } } },
             tooltip: {
-              backgroundColor: "#1a1d28",
-              titleColor: "#e6e6e6",
-              bodyColor: "#9ca3af",
-              borderColor: "#2a2d3a",
-              borderWidth: 1,
-              callbacks: {
-                label: ctx => ctx.dataset.label + ": $" + (ctx.parsed.y != null ? ctx.parsed.y.toFixed(2) : "—")
-              }
+              backgroundColor: "#1a1d28", titleColor: "#e6e6e6", bodyColor: "#9ca3af",
+              borderColor: "#2a2d3a", borderWidth: 1,
+              callbacks: { label: ctx => ctx.dataset.label + ": $" + (ctx.parsed.y != null ? ctx.parsed.y.toFixed(2) : "\u2014") }
             }
           },
           scales: {
-            x: {
-              ticks: { color: "#9ca3af", maxTicksLimit: 12 },
-              grid:  { color: "rgba(42,45,58,0.5)" }
-            },
-            y: {
-              ticks: { color: "#9ca3af", callback: v => "$" + v },
-              grid:  { color: "rgba(42,45,58,0.5)" }
-            }
+            x: { ticks: { color: "#9ca3af", maxTicksLimit: 12 }, grid: { color: "rgba(42,45,58,0.5)" } },
+            y: { ticks: { color: "#9ca3af", callback: v => "$" + v }, grid: { color: "rgba(42,45,58,0.5)" } }
           }
         }
       });
-
-      const tbody = document.getElementById("pred-body");
-      data.rows.forEach(r => {
-        const tr = document.createElement("tr");
-        const realVal  = (r.Real_Close != null && !isNaN(r.Real_Close)) ? Number(r.Real_Close).toFixed(2) : "—";
-        const predVal  = Number(r.Predicted_Close).toFixed(2);
-        const dirOk    = r.Correct_Direction;
-        const dirLabel = dirOk === true || dirOk === 1 ? "Correct" : (dirOk === false || dirOk === 0 ? "Wrong" : "—");
-        const dirClass = dirOk === true || dirOk === 1 ? "val-up" : (dirOk === false || dirOk === 0 ? "val-down" : "");
-        tr.innerHTML =
-          "<td>" + r.Date + "</td>" +
-          "<td>" + (r.Symbol || "GC=F") + "</td>" +
-          "<td>" + realVal + "</td>" +
-          "<td>" + predVal + "</td>" +
-          '<td class="' + dirClass + '">' + dirLabel + "</td>";
-        tbody.appendChild(tr);
-      });
-
-      loader.style.display  = "none";
-      content.style.display = "block";
-    } catch (err) {
-      loader.style.display  = "none";
-      errorEl.style.display = "block";
-      errorEl.textContent   = "Failed to load data: " + err.message;
     }
-  })();
+
+    // Table
+    const tbody = document.getElementById("pred-body");
+    tbody.innerHTML = "";
+    rows.forEach(r => {
+      const tr = document.createElement("tr");
+      const realVal  = (r.Real_Close != null && !isNaN(r.Real_Close)) ? Number(r.Real_Close).toFixed(2) : "\u2014";
+      const predVal  = Number(r.Predicted_Close).toFixed(2);
+      const dirOk    = r.Correct_Direction;
+      const dirLabel = dirOk === true || dirOk === 1 ? "Correct" : (dirOk === false || dirOk === 0 ? "Wrong" : "\u2014");
+      const dirClass = dirOk === true || dirOk === 1 ? "val-up" : (dirOk === false || dirOk === 0 ? "val-down" : "");
+      tr.innerHTML =
+        "<td>" + r.Date + "</td>" +
+        "<td>" + (r.Symbol || "GC=F") + "</td>" +
+        "<td>" + realVal + "</td>" +
+        "<td>" + predVal + "</td>" +
+        '<td class="' + dirClass + '">' + dirLabel + "</td>";
+      tbody.appendChild(tr);
+    });
+  }
+
+  /* ---------- Range buttons (client-side filter) ---------- */
+  document.querySelectorAll(".range-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".range-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      displayData(Number(btn.dataset.days));
+    });
+  });
 </script>
 </body>
 </html>

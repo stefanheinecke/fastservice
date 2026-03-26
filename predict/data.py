@@ -254,17 +254,31 @@ class Predictor:
 
         print("real_close column updated for matching dates.")
 
-    def fetch_prediction_history(self):
-        query = text(f"""
-            SELECT date AS "Date", symbol AS "Symbol",
-                   real_close AS "Real_Close", predicted_close AS "Predicted_Close"
-            FROM {self.TABLE_NAME}
-            WHERE symbol = :symbol
-              AND real_close IS NOT NULL
-            ORDER BY date DESC
-        """)
+    def fetch_prediction_history(self, limit=None):
+        if limit:
+            query = text(f"""
+                SELECT date AS "Date", symbol AS "Symbol",
+                       real_close AS "Real_Close", predicted_close AS "Predicted_Close"
+                FROM {self.TABLE_NAME}
+                WHERE symbol = :symbol
+                  AND real_close IS NOT NULL
+                ORDER BY date DESC
+                LIMIT :limit
+            """)
+            params = {"symbol": self.symbol, "limit": limit}
+        else:
+            query = text(f"""
+                SELECT date AS "Date", symbol AS "Symbol",
+                       real_close AS "Real_Close", predicted_close AS "Predicted_Close"
+                FROM {self.TABLE_NAME}
+                WHERE symbol = :symbol
+                  AND real_close IS NOT NULL
+                ORDER BY date DESC
+            """)
+            params = {"symbol": self.symbol}
+
         with self.engine.connect() as conn:
-            df = pd.read_sql(query, conn, params={"symbol": self.symbol})
+            df = pd.read_sql(query, conn, params=params)
 
         df["Real_Close"] = pd.to_numeric(df["Real_Close"], errors="coerce")
         df["Predicted_Close"] = pd.to_numeric(df["Predicted_Close"], errors="coerce")

@@ -5,7 +5,7 @@ import datetime
 
 import numpy as np
 import pandas as pd
-from flask import Flask, render_template, send_file, Response
+from flask import Flask, render_template, send_file, Response, request
 from data import Predictor
 
 app = Flask(__name__)
@@ -32,8 +32,9 @@ def index():
 
 @app.route("/api/predictions")
 def api_predictions():
+    days = request.args.get("days", default=None, type=int)
     predictor = _get_predictor()
-    df, correct_direction_perc, mae = predictor.fetch_prediction_history()
+    df, correct_direction_perc, mae = predictor.fetch_prediction_history(limit=days)
     df["Date"] = df["Date"].astype(str)
     # Replace NaN/None so JSON serialization doesn't produce invalid tokens
     rows = json.loads(df.to_json(orient="records"))
