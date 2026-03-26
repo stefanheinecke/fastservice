@@ -14,8 +14,8 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 SYMBOL = "GC=F"
 
 
-def _get_predictor():
-    return Predictor(DATABASE_URL, SYMBOL)
+def _get_predictor(symbol=None):
+    return Predictor(DATABASE_URL, symbol or SYMBOL)
 
 
 def _json_response(data):
@@ -52,10 +52,11 @@ def api_data_summary():
 
 @app.route("/api/predictions")
 def api_predictions():
+    symbol = request.args.get("symbol", default=None, type=str)
     days = request.args.get("days", default=None, type=int)
     start = request.args.get("start", default=None, type=str)
     end = request.args.get("end", default=None, type=str)
-    predictor = _get_predictor()
+    predictor = _get_predictor(symbol)
     df, correct_direction_perc, mae = predictor.fetch_prediction_history(
         limit=days, start_date=start, end_date=end
     )
@@ -79,14 +80,16 @@ def download_csv():
                      download_name=filename)
 
 
-@app.route("/api/store_predictions")
+@app.route("/api/store_predictions", methods=["POST"])
 def store_predictions():
-    predictor = _get_predictor()
+    body = request.get_json(silent=True) or {}
+    symbol = body.get("symbol", SYMBOL)
+    predictor = _get_predictor(symbol)
     forecast_df, past_df, df = predictor.create_predictions()
     predictor.store_predictions(past_df)
     predictor.store_predictions(forecast_df)
     predictor.update_with_real_close(df)
-    return _json_response({"message": "Predictions stored successfully."})
+    return _json_response({"message": f"Predictions for {symbol} stored successfully."})
 
 
 @app.route("/robots.txt")

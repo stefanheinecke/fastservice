@@ -104,13 +104,15 @@
     .range-btn:hover { color: var(--text); border-color: var(--accent); }
     .range-btn.active { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
 
-    /* Date inputs */
-    .date-input {
+    /* Date inputs & selects */
+    .date-input, .form-select, .form-text {
       background: var(--surface); border: 1px solid var(--border); color: var(--text);
       padding: .55rem .75rem; border-radius: 8px; font-size: .9rem; font-family: inherit;
       color-scheme: dark;
     }
-    .date-input:focus { outline: none; border-color: var(--accent); }
+    .date-input:focus, .form-select:focus, .form-text:focus { outline: none; border-color: var(--accent); }
+    .form-select { cursor: pointer; }
+    .form-label { display: block; font-size:.8rem; color:var(--muted); margin-bottom:.3rem; text-transform:uppercase; letter-spacing:.4px; }
 
     /* About, Contact, Privacy text */
     .prose { color: var(--muted); line-height: 1.8; max-width: 720px; }
@@ -133,21 +135,35 @@
 
   <!-- Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" data-tab="load-data">Load Data</button>
-    <button class="tab-btn" data-tab="predictions">Predictions</button>
+    <button class="tab-btn" data-tab="load-data">Load Data</button>
+    <button class="tab-btn active" data-tab="predictions">Predictions</button>
     <button class="tab-btn" data-tab="about">About</button>
     <button class="tab-btn" data-tab="contact">Contact</button>
     <button class="tab-btn" data-tab="privacy">Privacy Policy</button>
   </div>
 
   <!-- ==================== Load Data ==================== -->
-  <div id="load-data" class="tab-panel active">
-    <!-- Available data overview -->
+  <div id="load-data" class="tab-panel">
+    <!-- Available data overview with filters -->
     <div class="card">
-      <h2>Available Data</h2>
+      <h2>Available Tickers</h2>
       <p style="color:var(--muted); margin-bottom:1rem">
-        Overview of prediction data stored in the database.
+        All tickers in the database with their date ranges. Use the filters to narrow the view.
       </p>
+
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1rem">
+        <div>
+          <label class="form-label" for="filter-ticker">Ticker</label>
+          <select id="filter-ticker" class="form-select">
+            <option value="">All</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label" for="filter-date">Date</label>
+          <input type="date" id="filter-date" class="date-input" />
+        </div>
+      </div>
+
       <div id="summary-loader" style="color:var(--muted);font-size:.9rem">Loading summary&hellip;</div>
       <div id="summary-content" style="display:none">
         <div class="table-wrap">
@@ -162,39 +178,39 @@
       <div id="summary-error" class="error-msg" style="margin-top:1rem"></div>
     </div>
 
-    <!-- Load with date range -->
+    <!-- Trigger new prediction load -->
     <div class="card">
-      <h2>Load Predictions</h2>
+      <h2>Generate Predictions for a Ticker</h2>
       <p style="color:var(--muted); margin-bottom:1rem">
-        Choose a date range and load prediction data. Leave dates blank to load all available data.
+        Enter a Yahoo Finance ticker symbol (e.g. <strong style="color:var(--text)">GC=F</strong>,
+        <strong style="color:var(--text)">^GSPC</strong>, <strong style="color:var(--text)">AAPL</strong>)
+        to train the model and store predictions. This may take a few minutes.
       </p>
       <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.25rem">
         <div>
-          <label for="start-date" style="display:block; font-size:.8rem; color:var(--muted); margin-bottom:.3rem; text-transform:uppercase; letter-spacing:.4px">Start Date</label>
-          <input type="date" id="start-date" class="date-input" />
+          <label class="form-label" for="trigger-ticker">Ticker</label>
+          <input type="text" id="trigger-ticker" class="form-text" placeholder="GC=F" style="width:120px" />
         </div>
-        <div>
-          <label for="end-date" style="display:block; font-size:.8rem; color:var(--muted); margin-bottom:.3rem; text-transform:uppercase; letter-spacing:.4px">End Date</label>
-          <input type="date" id="end-date" class="date-input" />
-        </div>
-        <button id="load-btn" class="btn">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
-          Load Data
+        <button id="trigger-btn" class="btn">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+          Generate &amp; Store
         </button>
       </div>
-      <div id="load-status" style="margin-top:.5rem"></div>
+      <div id="trigger-status" style="margin-top:.5rem"></div>
     </div>
   </div>
 
   <!-- ==================== Predictions ==================== -->
-  <div id="predictions" class="tab-panel">
-    <div id="no-data-msg" class="card" style="text-align:center; color:var(--muted); padding:3rem">
-      No data loaded yet.&ensp;Go to the <strong style="color:var(--accent-light)">Load Data</strong> tab first.
-    </div>
-    <div id="pred-content" style="display:none">
-
-      <!-- Time range selector -->
-      <div style="margin-bottom:1.5rem; display:flex; gap:.5rem; flex-wrap:wrap">
+  <div id="predictions" class="tab-panel active">
+    <!-- Ticker + time range selector bar -->
+    <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem">
+      <div>
+        <label class="form-label" for="pred-ticker">Ticker</label>
+        <select id="pred-ticker" class="form-select">
+          <option value="">Loading&hellip;</option>
+        </select>
+      </div>
+      <div style="display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; padding-bottom:2px">
         <button class="range-btn" data-days="90">3M</button>
         <button class="range-btn" data-days="180">6M</button>
         <button class="range-btn" data-days="365">1Y</button>
@@ -202,6 +218,17 @@
         <button class="range-btn" data-days="1825">5Y</button>
         <button class="range-btn active" data-days="0">All</button>
       </div>
+    </div>
+
+    <div id="pred-placeholder" class="card" style="text-align:center; color:var(--muted); padding:3rem">
+      Select a ticker above to view predictions.
+    </div>
+    <div id="pred-loading" style="display:none; flex-direction:column; align-items:center; justify-content:center; gap:1rem; padding:4rem 0">
+      <div class="spinner"></div>
+      <span style="color:var(--muted)">Fetching predictions&hellip;</span>
+    </div>
+    <div id="pred-error" class="error-msg"></div>
+    <div id="pred-content" style="display:none">
 
       <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem">
         <div class="metric-card">
@@ -315,7 +342,7 @@
 </div>
 
 <script>
-  /* ---------- Tabs ---------- */
+  /* ========== Tabs ========== */
   document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
@@ -325,52 +352,36 @@
     });
   });
 
-  /* ---------- State ---------- */
-  let allRows    = null;
-  let priceChart = null;
+  /* ========== State ========== */
+  let summaryData   = [];     // [{symbol, min_date, max_date, total_rows, rows_with_real}]
+  let allRows       = null;   // rows for the currently selected ticker
+  let priceChart    = null;
+  let currentTicker = null;
 
-  const loadBtn     = document.getElementById("load-btn");
-  const loadStatus  = document.getElementById("load-status");
-  const noDataMsg   = document.getElementById("no-data-msg");
-  const predContent = document.getElementById("pred-content");
-  const startInput  = document.getElementById("start-date");
-  const endInput    = document.getElementById("end-date");
+  /* ========== DOM refs ========== */
+  const filterTicker  = document.getElementById("filter-ticker");
+  const filterDate    = document.getElementById("filter-date");
+  const summaryLoader = document.getElementById("summary-loader");
+  const summaryContent= document.getElementById("summary-content");
+  const summaryError  = document.getElementById("summary-error");
+  const summaryBody   = document.getElementById("summary-body");
+  const triggerBtn    = document.getElementById("trigger-btn");
+  const triggerTicker = document.getElementById("trigger-ticker");
+  const triggerStatus = document.getElementById("trigger-status");
+  const predTicker    = document.getElementById("pred-ticker");
+  const predPlaceholder = document.getElementById("pred-placeholder");
+  const predLoading   = document.getElementById("pred-loading");
+  const predError     = document.getElementById("pred-error");
+  const predContent   = document.getElementById("pred-content");
 
-  /* ---------- Load data summary on page open ---------- */
-  (async () => {
-    const summaryLoader  = document.getElementById("summary-loader");
-    const summaryContent = document.getElementById("summary-content");
-    const summaryError   = document.getElementById("summary-error");
+  /* ========== Load summary on page open ========== */
+  async function loadSummary() {
     try {
       const res = await fetch("/api/data-summary");
       if (!res.ok) throw new Error("Server responded " + res.status);
-      const rows = await res.json();
-      if (rows.length === 0) {
-        summaryLoader.textContent = "No prediction data in the database yet.";
-        return;
-      }
-      const tbody = document.getElementById("summary-body");
-      rows.forEach(r => {
-        const tr = document.createElement("tr");
-        const minDate = r.min_date ? r.min_date.slice(0, 10) : "\u2014";
-        const maxDate = r.max_date ? r.max_date.slice(0, 10) : "\u2014";
-        tr.innerHTML =
-          "<td>" + (r.symbol || "\u2014") + "</td>" +
-          "<td>" + minDate + "</td>" +
-          "<td>" + maxDate + "</td>" +
-          "<td>" + (r.total_rows || 0) + "</td>" +
-          "<td>" + (r.rows_with_real || 0) + "</td>";
-        tbody.appendChild(tr);
-        // Pre-fill the date inputs with the available range
-        if (r.symbol === "GC=F") {
-          startInput.value = minDate;
-          endInput.value   = maxDate;
-          startInput.min   = minDate;
-          startInput.max   = maxDate;
-          endInput.min     = minDate;
-          endInput.max     = maxDate;
-        }
-      });
+      summaryData = await res.json();
+      renderSummary();
+      populateTickerDropdowns();
       summaryLoader.style.display  = "none";
       summaryContent.style.display = "block";
     } catch (err) {
@@ -378,51 +389,143 @@
       summaryError.style.display  = "block";
       summaryError.textContent    = "Could not load summary: " + err.message;
     }
-  })();
+  }
 
-  /* ---------- Load Data (explicit user action, with date range) ---------- */
-  loadBtn.addEventListener("click", async () => {
-    loadBtn.disabled = true;
-    loadBtn.textContent = "Loading\u2026";
-    loadStatus.innerHTML = '<span style="color:var(--muted)">Fetching predictions from the server&hellip;</span>';
+  function renderSummary() {
+    const tickerVal = filterTicker.value;
+    const dateVal   = filterDate.value;
+    summaryBody.innerHTML = "";
+
+    let filtered = summaryData;
+    if (tickerVal) filtered = filtered.filter(r => r.symbol === tickerVal);
+    if (dateVal) {
+      filtered = filtered.filter(r => {
+        const min = r.min_date ? r.min_date.slice(0, 10) : null;
+        const max = r.max_date ? r.max_date.slice(0, 10) : null;
+        return min && max && dateVal >= min && dateVal <= max;
+      });
+    }
+
+    if (filtered.length === 0) {
+      summaryBody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--muted)">No matching data.</td></tr>';
+      return;
+    }
+
+    filtered.forEach(r => {
+      const tr = document.createElement("tr");
+      const minDate = r.min_date ? r.min_date.slice(0, 10) : "\u2014";
+      const maxDate = r.max_date ? r.max_date.slice(0, 10) : "\u2014";
+      tr.innerHTML =
+        "<td>" + (r.symbol || "\u2014") + "</td>" +
+        "<td>" + minDate + "</td>" +
+        "<td>" + maxDate + "</td>" +
+        "<td>" + (r.total_rows || 0) + "</td>" +
+        "<td>" + (r.rows_with_real || 0) + "</td>";
+      summaryBody.appendChild(tr);
+    });
+  }
+
+  function populateTickerDropdowns() {
+    const symbols = summaryData.map(r => r.symbol).filter(Boolean).sort();
+
+    // Filter dropdown
+    filterTicker.innerHTML = '<option value="">All</option>';
+    symbols.forEach(s => {
+      const o = document.createElement("option");
+      o.value = s; o.textContent = s;
+      filterTicker.appendChild(o);
+    });
+
+    // Predictions dropdown
+    predTicker.innerHTML = '<option value="">Select ticker&hellip;</option>';
+    symbols.forEach(s => {
+      const o = document.createElement("option");
+      o.value = s; o.textContent = s;
+      predTicker.appendChild(o);
+    });
+
+    // Auto-select first ticker in predictions if available
+    if (symbols.length > 0) {
+      predTicker.value = symbols[0];
+      loadPredictions(symbols[0]);
+    }
+  }
+
+  filterTicker.addEventListener("change", renderSummary);
+  filterDate.addEventListener("change", renderSummary);
+
+  /* ========== Generate & Store predictions ========== */
+  triggerBtn.addEventListener("click", async () => {
+    const symbol = triggerTicker.value.trim().toUpperCase();
+    if (!symbol) {
+      triggerStatus.innerHTML = '<span style="color:var(--red)">Please enter a ticker symbol.</span>';
+      return;
+    }
+    triggerBtn.disabled = true;
+    triggerBtn.textContent = "Generating\u2026";
+    triggerStatus.innerHTML = '<span style="color:var(--muted)">Training model and generating predictions for ' + symbol + '&hellip; This may take a few minutes.</span>';
 
     try {
-      let url = "/api/predictions";
-      const params = [];
-      if (startInput.value) params.push("start=" + startInput.value);
-      if (endInput.value) params.push("end=" + endInput.value);
-      if (params.length) url += "?" + params.join("&");
-
-      const res = await fetch(url);
+      const res = await fetch("/api/store_predictions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: symbol })
+      });
       if (!res.ok) throw new Error("Server responded " + res.status);
       const data = await res.json();
+      triggerStatus.innerHTML =
+        '<span style="color:var(--green)">\u2714 ' + data.message + '</span>';
+      // Refresh the summary table to show the new ticker
+      await loadSummary();
+    } catch (err) {
+      triggerStatus.innerHTML =
+        '<span style="color:var(--red)">\u2716 Failed: ' + err.message + '</span>';
+    } finally {
+      triggerBtn.disabled = false;
+      triggerBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg> Generate &amp; Store';
+    }
+  });
 
+  /* ========== Predictions tab ========== */
+  async function loadPredictions(symbol) {
+    if (!symbol) {
+      predPlaceholder.style.display = "block";
+      predContent.style.display     = "none";
+      predLoading.style.display     = "none";
+      predError.style.display       = "none";
+      allRows = null;
+      currentTicker = null;
+      return;
+    }
+
+    currentTicker = symbol;
+    predPlaceholder.style.display = "none";
+    predContent.style.display     = "none";
+    predError.style.display       = "none";
+    predLoading.style.display     = "flex";
+
+    try {
+      const res = await fetch("/api/predictions?symbol=" + encodeURIComponent(symbol));
+      if (!res.ok) throw new Error("Server responded " + res.status);
+      const data = await res.json();
       allRows = data.rows;
 
-      const rangeLabel = (startInput.value || "earliest") + " to " + (endInput.value || "latest");
-      loadStatus.innerHTML =
-        '<span style="color:var(--green)">\u2714 Loaded ' + allRows.length +
-        ' predictions (' + rangeLabel + ').</span><br>' +
-        '<span style="color:var(--muted);font-size:.85rem">' +
-        'Switch to the <strong>Predictions</strong> tab to view results.</span>';
-
-      noDataMsg.style.display   = "none";
+      predLoading.style.display = "none";
       predContent.style.display = "block";
-      // Reset range filter to All
       document.querySelectorAll(".range-btn").forEach(b => b.classList.remove("active"));
       document.querySelector('.range-btn[data-days="0"]').classList.add("active");
       displayData(0);
     } catch (err) {
-      loadStatus.innerHTML =
-        '<span style="color:var(--red)">\u2716 Failed to load: ' + err.message + '</span>';
-    } finally {
-      loadBtn.disabled = false;
-      loadBtn.innerHTML =
-        '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg> Load Data';
+      predLoading.style.display = "none";
+      predError.style.display   = "block";
+      predError.textContent     = "Failed to load predictions: " + err.message;
     }
-  });
+  }
 
-  /* ---------- Display / filter cached data ---------- */
+  predTicker.addEventListener("change", () => loadPredictions(predTicker.value));
+
+  /* ========== Display / filter cached data ========== */
   function displayData(days) {
     if (!allRows) return;
 
@@ -527,7 +630,7 @@
       const dirClass = dirOk === true || dirOk === 1 ? "val-up" : (dirOk === false || dirOk === 0 ? "val-down" : "");
       tr.innerHTML =
         "<td>" + r.Date + "</td>" +
-        "<td>" + (r.Symbol || "GC=F") + "</td>" +
+        "<td>" + (r.Symbol || "") + "</td>" +
         "<td>" + realVal + "</td>" +
         "<td>" + predVal + "</td>" +
         '<td class="' + dirClass + '">' + dirLabel + "</td>";
@@ -535,7 +638,7 @@
     });
   }
 
-  /* ---------- Range buttons (client-side filter) ---------- */
+  /* ========== Range buttons (client-side filter) ========== */
   document.querySelectorAll(".range-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       document.querySelectorAll(".range-btn").forEach(b => b.classList.remove("active"));
@@ -543,6 +646,9 @@
       displayData(Number(btn.dataset.days));
     });
   });
+
+  /* ========== Init ========== */
+  loadSummary();
 </script>
 </body>
 </html>
