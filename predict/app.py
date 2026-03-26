@@ -1,46 +1,71 @@
-import streamlit as st
+import io
 import os
-from predictions import show_predictions
+import datetime
 
-st.set_page_config(page_title="Gold Price Predictor", layout="centered")
+import pandas as pd
+from flask import Flask, jsonify, render_template, send_file
+from data import Predictor
 
-def show_about():
-    st.title("About")
-    st.write(
-        "This app predicts gold prices using a trained TensorFlow model. "
-        "Your gold price predictor is a machine learning-powered tool designed to "
-        "forecast the next day's gold price based on historical market data and technical indicators. "
-        "It uses a sliding window approach to capture patterns from the past 100 trading days, "
-        "transforming this data into a feature-rich input for a neural network built with TensorFlow. "
-        "The model incorporates indicators like RSI, MACD, Bollinger Bands, EMA, and volume-based metrics "
-        "to enhance its understanding of market momentum, volatility, and trend behavior.\n\n"
-        "Once trained, the model predicts future prices and evaluates its performance using metrics "
-        "such as Mean Squared Error (MSE), Mean Absolute Error (MAE), Root Mean Squared Error (RMSE), "
-        "Mean Absolute Percentage Error (MAPE), and directional accuracy. These metrics help assess "
-        "not just how close the predictions are, but whether the model correctly anticipates upward or downward movements.\n\n"
-        "The predictor also generates rolling forecasts and a one-day-ahead prediction, which can be visualized "
-        "or stored for further analysis. It’s designed to be modular, scalable, and deployable via Cloud Run, "
-        "making it suitable for integration into dashboards or automated workflows. Overall, "
-        "it’s a robust tool for traders, analysts, or curious minds looking to anticipate "
-        "gold price movements with data-driven precision."
-    )
+app = Flask(__name__)
 
-def show_contact():
-    st.title("Contact")
-    st.write("For inquiries, reach out to info@goldpredicts.com")
+DATABASE_URL = os.environ.get("DATABASE_URL")
+SYMBOL = "GC=F"
 
-def show_privacy():
-    st.title("Privacy Policy")
-    st.write("We respect your privacy. No personal data is stored...")
 
-# Top menu
-tab1, tab2, tab3, tab4 = st.tabs(["Predictions", "About", "Contact", "Privacy Policy"])
+def _get_predictor():
+    return Predictor(DATABASE_URL, SYMBOL)
 
-with tab1:
-    show_predictions()
-with tab2:
-    show_about()
-with tab3:
-    show_contact()
-with tab4:
-    show_privacy()
+
+# -- Pages --
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+# -- API --
+
+@app.route("/api/predictions")
+def api_predictions():
+    predictor = _get_predictor()
+    df, correct_direction_perc = predictor.fetch_prediction_history()
+    df["Date"] = df["Date"].astype(str)
+    return jsonify({
+        "correct_direction_pct": round(correct_direction_perc, 2),
+        "rows": df.to_dict(orient="records"),
+    })
+
+
+@app.route("/api/download")
+def download_csv():
+    predictor = _get_predictor()
+    df, _ = predictor.fetch_prediction_history()
+    buf = io.BytesIO(df.to_csv(index=False).encode("utf-8"))
+    filename = f"gold_prediction_report_{datetime.date.today()}.csv"
+    return send_file(buf, mimetype="text/csv", as_attachment=True,
+                     download_name=filename)
+
+
+@app.route("/api/store_predictions")
+def store_predictions():
+    predictor = _get_predictor()
+    forecast_df, past_df, df = predictor.create_predictions()
+    predictor.store_predictions(past_df)
+    predictor.store_predictions(forecast_df)
+    predictor.update_with_real_close(df)
+    return jsonify({"message": "Predictions stored successfully."})
+
+
+@app.route("/robots.txt")
+def robots():
+    return send_file("robots.txt", mimetype="text/plain")
+
+
+@app.route("/sitemap.xml")
+def sitemap():
+    return send_file("sitemap.xml", mimetype="application/xml")
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port)

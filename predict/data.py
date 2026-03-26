@@ -9,7 +9,7 @@ import random
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
-from google.cloud import bigquery
+from sqlalchemy import create_engine, text
 import matplotlib.pyplot as plt
 
 # from tensorflow.keras.models import Sequential
@@ -34,12 +34,26 @@ def load_data(symbol: str):
     return df.dropna()
 
 class Predictor:
-    def __init__(self, project_id: str, dataset_id: str, table_id: str, symbol: str):
-        self.client = bigquery.Client(project=project_id)
+    TABLE_NAME = "predictions"
+
+    def __init__(self, database_url: str, symbol: str):
+        self.engine = create_engine(database_url)
         self.symbol = symbol
-        self.project_id = project_id
-        self.dataset_id = dataset_id
-        self.table_id = table_id
+        self._ensure_table()
+
+    def _ensure_table(self):
+        """Create the predictions table if it doesn't exist."""
+        ddl = text(f"""
+            CREATE TABLE IF NOT EXISTS {self.TABLE_NAME} (
+                id TEXT PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                date DATE NOT NULL,
+                predicted_close DOUBLE PRECISION,
+                real_close DOUBLE PRECISION
+            )
+        """)
+        with self.engine.begin() as conn:
+            conn.execute(ddl)
 
     def create_predictions(self):
         df = load_data(self.symbol)
@@ -182,132 +196,84 @@ class Predictor:
         return forecast_df, past_df, df
 
     def store_predictions(self, forecast_df):
-        print("Storing predictions in BigQuery...")
+        print("Storing predictions in Postgres...")
 
-        query = f"""
-            SELECT id, Date, Symbol
-            FROM `{self.project_id}.{self.dataset_id}.{self.table_id}`
-            """
-        existing = self.client.query(query).to_dataframe()
-
-        # Ensure only Date and Predicted_Close columns are present
-        forecast_df = forecast_df[["id", "Symbol", "Date", "Predicted_Close"]]
-        # Ensure Date column is of datetime.date type
+        forecast_df = forecast_df[["id", "Symbol", "Date", "Predicted_Close"]].copy()
         forecast_df["Date"] = pd.to_datetime(forecast_df["Date"]).dt.date
-        #forecast_df["Created_at"] = pd.to_datetime(forecast_df["Created_at"]).dt.date
-        # Merge and find new records
+
+        # Find existing dates+symbols to avoid duplicates
+        with self.engine.connect() as conn:
+            existing = pd.read_sql(
+                text(f"SELECT id, date, symbol FROM {self.TABLE_NAME}"),
+                conn,
+            )
+
         merged = forecast_df.merge(
             existing,
-            on=["Date", "Symbol"],
+            left_on=["Date", "Symbol"],
+            right_on=["date", "symbol"],
             how="left",
-            indicator=True
+            indicator=True,
         )
-        merged.rename(columns={"id_x": "id"}, inplace=True)
-        merged.drop(columns=["id_y"], inplace=True)
-
-        new_rows = merged[merged["_merge"] == "left_only"].drop(columns=["_merge"])
-
-        new_rows.dropna(inplace=True)
+        new_rows = merged[merged["_merge"] == "left_only"][
+            ["id_x", "Symbol", "Date", "Predicted_Close"]
+        ].rename(columns={"id_x": "id"}).dropna()
 
         if not new_rows.empty:
-            table_ref = f"{self.project_id}.{self.dataset_id}.{self.table_id}"
-            job = self.client.load_table_from_dataframe(
-                new_rows,
-                table_ref,
-                job_config=bigquery.LoadJobConfig(
-                    write_disposition="WRITE_APPEND",
-                    schema=[
-                        bigquery.SchemaField("id", "STRING"),
-                        #bigquery.SchemaField("Created_at", "DATE"),
-                        bigquery.SchemaField("Symbol", "STRING"),
-                        bigquery.SchemaField("Date", "DATE"),
-                        bigquery.SchemaField("Predicted_Close", "FLOAT"),
-                    ]
-                )
+            records = new_rows.rename(columns={
+                "Symbol": "symbol",
+                "Date": "date",
+                "Predicted_Close": "predicted_close",
+            })
+            records.to_sql(
+                self.TABLE_NAME, self.engine, if_exists="append", index=False,
             )
-            job.result()
-            print(f"Job completed: {job.job_id}")
+            print(f"Inserted {len(records)} new rows.")
         else:
             print("No new records to insert.")
 
     def update_with_real_close(self, df):
+        print("Updating real_close values in Postgres...")
 
-        # --- Update Real_Close column for matching dates ---
-        print("Updating Real_Close values in BigQuery...")
-
-        # Prepare a DataFrame with Date and Real_Close from df
         real_close_df = pd.DataFrame({
-            "Date": pd.to_datetime(df.index).date,
-            "Real_Close": df["Close"].values
+            "date": pd.to_datetime(df.index).date,
+            "real_close": df["Close"].values,
         })
 
-        print(f"real_close_df:\n{real_close_df}")
+        update_stmt = text(f"""
+            UPDATE {self.TABLE_NAME}
+            SET real_close = :real_close
+            WHERE date = :date
+        """)
 
-        # For each date, update Real_Close in BigQuery
-        # Batch update Real_Close using a temporary table and MERGE statement for efficiency
+        with self.engine.begin() as conn:
+            for _, row in real_close_df.iterrows():
+                conn.execute(update_stmt, {"real_close": float(row["real_close"]),
+                                           "date": row["date"]})
 
-        # Prepare DataFrame for upload
-        real_close_df["Date"] = pd.to_datetime(real_close_df["Date"])
-        temp_table_id = f"{self.dataset_id}.temp_real_close_update"
-
-        # Upload to temporary table
-        job = self.client.load_table_from_dataframe(
-            real_close_df,
-            f"{self.project_id}.{temp_table_id}",
-            job_config=bigquery.LoadJobConfig(
-                write_disposition="WRITE_TRUNCATE",
-                schema=[
-                    bigquery.SchemaField("Date", "DATE"),
-                    bigquery.SchemaField("Real_Close", "FLOAT"),
-                ]
-            )
-        )
-        job.result()
-
-        # Use MERGE to update Real_Close in one query
-        merge_query = f"""
-            MERGE `{self.project_id}.{self.dataset_id}.{self.table_id}` T
-            USING `{self.project_id}.{temp_table_id}` S
-            ON T.Date = S.Date
-            WHEN MATCHED THEN
-            UPDATE SET T.Real_Close = S.Real_Close
-        """
-
-        merge_job = self.client.query(merge_query)
-        merge_job.result()
-
-        # Optionally, delete the temp table
-        # self.client.delete_table(f"{self.project_id}.{temp_table_id}", not_found_ok=True)
-        print("Real_Close column updated for matching dates.")
+        print("real_close column updated for matching dates.")
 
     def fetch_prediction_history(self):
-        query = f"""
-            SELECT Date, Symbol, Real_Close, Predicted_Close
-            FROM `{self.project_id}.{self.dataset_id}.{self.table_id}`
-            WHERE Symbol = @Symbol
-            ORDER BY Date DESC
-        """
-        print(f"Executing query: {query}")
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("Symbol", "STRING", self.symbol)
-            ]
-        )
-        print(f"Query Job Config: {job_config}")
-        df = self.client.query(query, job_config=job_config).to_dataframe()
-        #df["Created_at"] = df["Created_at"].astype(str)
-        df["Real_Close"] = df["Real_Close"].apply(lambda x: "NaN" if pd.isna(x) else x)
-        # Compare each value with the previous day's value
+        query = text(f"""
+            SELECT date AS "Date", symbol AS "Symbol",
+                   real_close AS "Real_Close", predicted_close AS "Predicted_Close"
+            FROM {self.TABLE_NAME}
+            WHERE symbol = :symbol
+            ORDER BY date DESC
+        """)
+        with self.engine.connect() as conn:
+            df = pd.read_sql(query, conn, params={"symbol": self.symbol})
+
         df["Real_Close"] = pd.to_numeric(df["Real_Close"], errors="coerce")
         df["Predicted_Close"] = pd.to_numeric(df["Predicted_Close"], errors="coerce")
         df["Real_Close_diff"] = df["Real_Close"] - df["Real_Close"].shift(-1)
         df["Predicted_Close_diff"] = df["Predicted_Close"] - df["Predicted_Close"].shift(-1)
 
-        # Condition: both increasing OR both decreasing
-        df["Correct_Direction"] = ((df["Real_Close_diff"] > 0) & (df["Predicted_Close_diff"] > 0)) | \
-                ((df["Real_Close_diff"] < 0) & (df["Predicted_Close_diff"] < 0))
-        #df.drop(columns=["Real_Close_diff", "Predicted_Close_diff"], inplace=True)
-        print(f"Fetched prediction history for {self.symbol}:\n{df}")
+        df["Correct_Direction"] = (
+            ((df["Real_Close_diff"] > 0) & (df["Predicted_Close_diff"] > 0)) |
+            ((df["Real_Close_diff"] < 0) & (df["Predicted_Close_diff"] < 0))
+        )
+
         correct_direction = df["Correct_Direction"].sum()
         correct_direction_perc = correct_direction / len(df) * 100 if len(df) > 0 else 0
         return df, correct_direction_perc

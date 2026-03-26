@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SX5E Forecast</title>
+  <meta name="description" content="GoldPredicts - a machine learning powered gold price predictor. Forecast tomorrow's gold close, track accuracy, and explore trends in the world's most trusted safe-haven asset." />
+  <title>Gold Price Predictor</title>
   <style>
     :root {
       --bg: #0f1117;
@@ -11,25 +12,34 @@
       --border: #2a2d3a;
       --text: #e6e6e6;
       --muted: #9ca3af;
-      --accent: #6366f1;
-      --accent-light: #818cf8;
+      --accent: #d4a017;
+      --accent-light: #e6b422;
       --green: #22c55e;
       --red: #ef4444;
     }
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-      min-height: 100vh;
+      background: var(--bg); color: var(--text);
+      line-height: 1.6; min-height: 100vh;
     }
-    .container { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
 
     /* Header */
-    header { text-align: center; margin-bottom: 2.5rem; }
-    header h1 { font-size: 1.75rem; font-weight: 700; }
-    header p  { color: var(--muted); margin-top: .35rem; font-size: .95rem; }
+    header { text-align: center; margin-bottom: 1.5rem; }
+    header h1 { font-size: 1.75rem; font-weight: 700; color: var(--accent-light); }
+    header p  { color: var(--muted); margin-top: .35rem; font-size: .95rem; max-width: 640px; margin-inline: auto; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: .5rem; margin-bottom: 2rem; border-bottom: 1px solid var(--border); padding-bottom: .5rem; flex-wrap: wrap; }
+    .tab-btn {
+      background: none; border: none; color: var(--muted); padding: .5rem 1rem;
+      font-size: .9rem; cursor: pointer; border-radius: 6px 6px 0 0; transition: color .2s, background .2s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent-light); background: var(--surface); font-weight: 600; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
 
     /* Loader */
     #loader {
@@ -42,43 +52,38 @@
       animation: spin .8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    #content { display: none; }
 
-    /* Metrics */
-    .metrics {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 1rem; margin-bottom: 2rem;
-    }
-    .metric-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 12px; padding: 1.25rem;
-    }
-    .metric-card .label { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-    .metric-card .value { font-size: 1.5rem; font-weight: 700; margin-top: .25rem; }
-
-    /* Card */
+    /* Cards */
     .card {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem;
     }
     .card h2 { font-size: 1.15rem; margin-bottom: 1rem; }
 
-    /* Chart */
-    .chart-img { width: 100%; border-radius: 8px; }
+    /* Metric */
+    .metric-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.25rem; margin-bottom: 1.5rem; display: inline-block;
+    }
+    .metric-card .label { font-size: .8rem; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+    .metric-card .value { font-size: 1.5rem; font-weight: 700; margin-top: .25rem; color: var(--accent-light); }
 
     /* Tables */
-    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-    th, td { text-align: left; padding: .65rem .75rem; border-bottom: 1px solid var(--border); }
-    th { color: var(--muted); font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .4px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th, td { text-align: left; padding: .6rem .75rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .4px; position: sticky; top: 0; background: var(--surface); }
     tr:last-child td { border-bottom: none; }
-    tbody tr:hover { background: rgba(99,102,241,.06); }
+    tbody tr:hover { background: rgba(212,160,23,.06); }
+    .val-up { color: var(--green); }
+    .val-down { color: var(--red); }
 
-    /* Button */
+    /* Buttons */
     .btn {
       display: inline-flex; align-items: center; gap: .5rem;
-      background: var(--accent); color: #fff; border: none;
+      background: var(--accent); color: #111; border: none;
       padding: .65rem 1.25rem; border-radius: 8px; font-size: .9rem;
-      cursor: pointer; transition: background .2s;
+      font-weight: 600; cursor: pointer; transition: background .2s; text-decoration: none;
     }
     .btn:hover { background: var(--accent-light); }
     .btn svg { width: 18px; height: 18px; }
@@ -90,135 +95,166 @@
       text-align: center; display: none;
     }
 
-    /* Responsive */
+    /* About, Contact, Privacy text */
+    .prose { color: var(--muted); line-height: 1.8; max-width: 720px; }
+    .prose h3 { color: var(--text); margin-top: 1.5rem; margin-bottom: .5rem; }
+    .prose a { color: var(--accent-light); }
+    .disclaimer { font-style: italic; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--border); padding-top: 1rem; margin-top: 2rem; }
+
     @media (max-width: 600px) {
       .container { padding: 1rem; }
       header h1 { font-size: 1.3rem; }
-      .metric-card .value { font-size: 1.2rem; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>EURO STOXX 50 (SX5E) Stock Prediction</h1>
-      <p>Deep-learning forecast powered by TensorFlow &amp; technical indicators</p>
-    </header>
+<div class="container">
+  <header>
+    <h1>Gold Price Predictor</h1>
+    <p>Forecast tomorrow's gold price with data-driven insights powered by deep learning.</p>
+  </header>
 
-    <!-- Loader -->
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="predictions">Predictions</button>
+    <button class="tab-btn" data-tab="about">About</button>
+    <button class="tab-btn" data-tab="contact">Contact</button>
+    <button class="tab-btn" data-tab="privacy">Privacy Policy</button>
+  </div>
+
+  <!-- ==================== Predictions ==================== -->
+  <div id="predictions" class="tab-panel active">
     <div id="loader">
       <div class="spinner"></div>
-      <span style="color:var(--muted)">Loading model &amp; data&hellip; this may take a moment</span>
+      <span style="color:var(--muted)">Loading prediction data&hellip;</span>
     </div>
-
-    <!-- Error -->
     <div id="error" class="error-msg"></div>
+    <div id="pred-content" style="display:none">
 
-    <!-- Main content (hidden until data arrives) -->
-    <div id="content">
-      <!-- Metrics -->
-      <div class="metrics">
-        <div class="metric-card">
-          <div class="label">Mean Absolute Error</div>
-          <div class="value" id="mae"></div>
-        </div>
-        <div class="metric-card">
-          <div class="label">RMSE</div>
-          <div class="value" id="rmse"></div>
-        </div>
-        <div class="metric-card">
-          <div class="label">MAPE</div>
-          <div class="value" id="mape"></div>
-        </div>
-        <div class="metric-card">
-          <div class="label">Directional Accuracy</div>
-          <div class="value" id="dir-acc"></div>
-        </div>
+      <div class="metric-card">
+        <div class="label">Correct Direction</div>
+        <div class="value" id="dir-pct"></div>
       </div>
 
-      <!-- Chart -->
       <div class="card">
-        <h2>Actual vs Predicted &amp; 5-Day Forecast</h2>
-        <img id="chart" class="chart-img" alt="Forecast chart" />
-      </div>
-
-      <!-- Historical table -->
-      <div class="card">
-        <h2>Recent Historical Data</h2>
-        <div style="overflow-x:auto">
+        <h2>Prediction History</h2>
+        <div class="table-wrap" style="max-height:480px; overflow-y:auto">
           <table>
             <thead>
-              <tr><th>Date</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Volume</th></tr>
+              <tr>
+                <th>Date</th><th>Symbol</th><th>Real Close</th><th>Predicted Close</th><th>Direction</th>
+              </tr>
             </thead>
-            <tbody id="hist-body"></tbody>
+            <tbody id="pred-body"></tbody>
           </table>
         </div>
       </div>
 
-      <!-- Forecast table -->
-      <div class="card">
-        <h2>Next 5-Day Forecast</h2>
-        <div style="overflow-x:auto">
-          <table>
-            <thead><tr><th>Date</th><th>Predicted Close</th></tr></thead>
-            <tbody id="fc-body"></tbody>
-          </table>
-        </div>
-        <div style="margin-top:1rem">
-          <a id="dl-btn" class="btn" href="/api/download">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3"/></svg>
-            Download CSV Report
-          </a>
-        </div>
+      <div style="display:flex; gap:.75rem; flex-wrap:wrap">
+        <a class="btn" href="/api/download">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3"/></svg>
+          Download CSV
+        </a>
+      </div>
+
+      <div class="disclaimer" style="margin-top:2rem">
+        The Gold Price Predictor is provided for informational and educational purposes only.
+        The forecasts shown are generated from historical data and machine-learning models, and there is <strong>no guarantee of accuracy or future performance</strong>.
+        This tool should not be considered financial advice, and users should make investment decisions at their own discretion.
       </div>
     </div>
   </div>
 
-  <script>
-    (async () => {
-      const loader  = document.getElementById("loader");
-      const content = document.getElementById("content");
-      const errorEl = document.getElementById("error");
+  <!-- ==================== About ==================== -->
+  <div id="about" class="tab-panel">
+    <div class="card prose">
+      <h2>About</h2>
+      <p>
+        This app predicts gold prices using a trained TensorFlow model.
+        It is a machine-learning-powered tool designed to forecast the next day&rsquo;s gold price
+        based on historical market data and technical indicators.
+      </p>
+      <p>
+        It uses a sliding window approach to capture patterns from the past 100 trading days,
+        transforming this data into a feature-rich input for a neural network built with TensorFlow.
+        The model incorporates indicators like RSI, MACD, Bollinger Bands, EMA, and volume-based metrics
+        to enhance its understanding of market momentum, volatility, and trend behaviour.
+      </p>
+      <p>
+        Once trained, the model predicts future prices and evaluates its performance using metrics
+        such as MSE, MAE, RMSE, MAPE, and directional accuracy. These metrics help assess
+        not just how close the predictions are, but whether the model correctly anticipates
+        upward or downward movements.
+      </p>
+    </div>
+  </div>
 
-      try {
-        const res  = await fetch("/api/data");
-        if (!res.ok) throw new Error(`Server responded ${res.status}`);
-        const data = await res.json();
+  <!-- ==================== Contact ==================== -->
+  <div id="contact" class="tab-panel">
+    <div class="card prose">
+      <h2>Contact</h2>
+      <p>For inquiries, reach out to <a href="mailto:info@goldpredicts.com">info@goldpredicts.com</a></p>
+    </div>
+  </div>
 
-        // metrics
-        const m = data.metrics;
-        document.getElementById("mae").textContent     = `$${m.mae}`;
-        document.getElementById("rmse").textContent    = `$${m.rmse}`;
-        document.getElementById("mape").textContent    = `${m.mape}%`;
-        document.getElementById("dir-acc").textContent = `${m.direction_accuracy}%`;
+  <!-- ==================== Privacy ==================== -->
+  <div id="privacy" class="tab-panel">
+    <div class="card prose">
+      <h2>Privacy Policy</h2>
+      <p>We respect your privacy. No personal data is stored or shared with third parties.</p>
+    </div>
+  </div>
+</div>
 
-        // chart
-        document.getElementById("chart").src = `data:image/png;base64,${data.chart}`;
+<script>
+  /* ---------- Tabs ---------- */
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById(btn.dataset.tab).classList.add("active");
+    });
+  });
 
-        // historical table
-        const hBody = document.getElementById("hist-body");
-        data.historical.forEach(r => {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `<td>${r.Date}</td><td>${r.Open.toFixed(2)}</td><td>${r.High.toFixed(2)}</td><td>${r.Low.toFixed(2)}</td><td>${r.Close.toFixed(2)}</td><td>${Number(r.Volume).toLocaleString()}</td>`;
-          hBody.appendChild(tr);
-        });
+  /* ---------- Load predictions ---------- */
+  (async () => {
+    const loader  = document.getElementById("loader");
+    const content = document.getElementById("pred-content");
+    const errorEl = document.getElementById("error");
 
-        // forecast table
-        const fBody = document.getElementById("fc-body");
-        data.forecast.forEach(r => {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `<td>${r.Date}</td><td>${r.Predicted_Close.toFixed(2)}</td>`;
-          fBody.appendChild(tr);
-        });
+    try {
+      const res = await fetch("/api/predictions");
+      if (!res.ok) throw new Error("Server responded " + res.status);
+      const data = await res.json();
 
-        loader.style.display  = "none";
-        content.style.display = "block";
-      } catch (err) {
-        loader.style.display  = "none";
-        errorEl.style.display = "block";
-        errorEl.textContent   = `Failed to load data: ${err.message}`;
-      }
-    })();
-  </script>
+      document.getElementById("dir-pct").textContent = data.correct_direction_pct + "%";
+
+      const tbody = document.getElementById("pred-body");
+      data.rows.forEach(r => {
+        const tr = document.createElement("tr");
+        const realVal  = (r.Real_Close != null && !isNaN(r.Real_Close)) ? Number(r.Real_Close).toFixed(2) : "—";
+        const predVal  = Number(r.Predicted_Close).toFixed(2);
+        const dirOk    = r.Correct_Direction;
+        const dirLabel = dirOk === true || dirOk === 1 ? "Correct" : (dirOk === false || dirOk === 0 ? "Wrong" : "—");
+        const dirClass = dirOk === true || dirOk === 1 ? "val-up" : (dirOk === false || dirOk === 0 ? "val-down" : "");
+        tr.innerHTML =
+          "<td>" + r.Date + "</td>" +
+          "<td>" + (r.Symbol || "GC=F") + "</td>" +
+          "<td>" + realVal + "</td>" +
+          "<td>" + predVal + "</td>" +
+          '<td class="' + dirClass + '">' + dirLabel + "</td>";
+        tbody.appendChild(tr);
+      });
+
+      loader.style.display  = "none";
+      content.style.display = "block";
+    } catch (err) {
+      loader.style.display  = "none";
+      errorEl.style.display = "block";
+      errorEl.textContent   = "Failed to load data: " + err.message;
+    }
+  })();
+</script>
 </body>
 </html>
