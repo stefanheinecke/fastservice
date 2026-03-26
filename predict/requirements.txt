@@ -2,7 +2,7 @@ flask
 gunicorn
 sqlalchemy
 psycopg2-binary
-tensorflow
+tensorflow-cpu
 ta
 yfinance
 matplotlib
