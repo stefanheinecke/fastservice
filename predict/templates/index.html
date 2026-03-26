@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="GoldPredicts - a machine learning powered gold price predictor. Forecast tomorrow's gold close, track accuracy, and explore trends in the world's most trusted safe-haven asset." />
   <title>Gold Price Predictor</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <style>
     :root {
       --bg: #0f1117;
@@ -142,8 +143,15 @@
         </div>
       </div>
 
+      <!-- Chart -->
       <div class="card">
-        <h2>Prediction History</h2>
+        <h2>Real Close vs Predicted Close</h2>
+        <div style="position:relative;height:400px">
+          <canvas id="price-chart"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
         <div class="table-wrap" style="max-height:480px; overflow-y:auto">
           <table>
             <thead>
@@ -236,6 +244,71 @@
 
       document.getElementById("dir-pct").textContent = data.correct_direction_pct + "%";
       document.getElementById("mae").textContent = "$" + data.mae;
+
+      /* ---------- Chart ---------- */
+      const sorted = [...data.rows].reverse();
+      const labels    = sorted.map(r => r.Date);
+      const realData  = sorted.map(r => r.Real_Close);
+      const predData  = sorted.map(r => r.Predicted_Close);
+
+      new Chart(document.getElementById("price-chart"), {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Real Close",
+              data: realData,
+              borderColor: "#e6e6e6",
+              backgroundColor: "rgba(230,230,230,0.08)",
+              borderWidth: 2,
+              pointRadius: 0,
+              pointHitRadius: 6,
+              tension: 0.3,
+              fill: false,
+            },
+            {
+              label: "Predicted Close",
+              data: predData,
+              borderColor: "#d4a017",
+              backgroundColor: "rgba(212,160,23,0.10)",
+              borderWidth: 2,
+              pointRadius: 0,
+              pointHitRadius: 6,
+              tension: 0.3,
+              fill: false,
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { labels: { color: "#e6e6e6", font: { size: 13 } } },
+            tooltip: {
+              backgroundColor: "#1a1d28",
+              titleColor: "#e6e6e6",
+              bodyColor: "#9ca3af",
+              borderColor: "#2a2d3a",
+              borderWidth: 1,
+              callbacks: {
+                label: ctx => ctx.dataset.label + ": $" + (ctx.parsed.y != null ? ctx.parsed.y.toFixed(2) : "—")
+              }
+            }
+          },
+          scales: {
+            x: {
+              ticks: { color: "#9ca3af", maxTicksLimit: 12 },
+              grid:  { color: "rgba(42,45,58,0.5)" }
+            },
+            y: {
+              ticks: { color: "#9ca3af", callback: v => "$" + v },
+              grid:  { color: "rgba(42,45,58,0.5)" }
+            }
+          }
+        }
+      });
 
       const tbody = document.getElementById("pred-body");
       data.rows.forEach(r => {
