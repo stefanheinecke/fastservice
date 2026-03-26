@@ -104,6 +104,14 @@
     .range-btn:hover { color: var(--text); border-color: var(--accent); }
     .range-btn.active { background: var(--accent); color: #111; border-color: var(--accent); font-weight: 600; }
 
+    /* Date inputs */
+    .date-input {
+      background: var(--surface); border: 1px solid var(--border); color: var(--text);
+      padding: .55rem .75rem; border-radius: 8px; font-size: .9rem; font-family: inherit;
+      color-scheme: dark;
+    }
+    .date-input:focus { outline: none; border-color: var(--accent); }
+
     /* About, Contact, Privacy text */
     .prose { color: var(--muted); line-height: 1.8; max-width: 720px; }
     .prose h3 { color: var(--text); margin-top: 1.5rem; margin-bottom: .5rem; }
@@ -134,17 +142,47 @@
 
   <!-- ==================== Load Data ==================== -->
   <div id="load-data" class="tab-panel active">
+    <!-- Available data overview -->
     <div class="card">
-      <h2>Load Prediction Data</h2>
-      <p style="color:var(--muted); margin-bottom:1.25rem">
-        Fetch all stored predictions from the server. Once loaded, switch to the
-        <strong style="color:var(--text)">Predictions</strong> tab to explore results.
+      <h2>Available Data</h2>
+      <p style="color:var(--muted); margin-bottom:1rem">
+        Overview of prediction data stored in the database.
       </p>
-      <button id="load-btn" class="btn">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
-        Load Data
-      </button>
-      <div id="load-status" style="margin-top:1rem"></div>
+      <div id="summary-loader" style="color:var(--muted);font-size:.9rem">Loading summary&hellip;</div>
+      <div id="summary-content" style="display:none">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Symbol</th><th>From</th><th>To</th><th>Total Rows</th><th>With Real Close</th></tr>
+            </thead>
+            <tbody id="summary-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="summary-error" class="error-msg" style="margin-top:1rem"></div>
+    </div>
+
+    <!-- Load with date range -->
+    <div class="card">
+      <h2>Load Predictions</h2>
+      <p style="color:var(--muted); margin-bottom:1rem">
+        Choose a date range and load prediction data. Leave dates blank to load all available data.
+      </p>
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.25rem">
+        <div>
+          <label for="start-date" style="display:block; font-size:.8rem; color:var(--muted); margin-bottom:.3rem; text-transform:uppercase; letter-spacing:.4px">Start Date</label>
+          <input type="date" id="start-date" class="date-input" />
+        </div>
+        <div>
+          <label for="end-date" style="display:block; font-size:.8rem; color:var(--muted); margin-bottom:.3rem; text-transform:uppercase; letter-spacing:.4px">End Date</label>
+          <input type="date" id="end-date" class="date-input" />
+        </div>
+        <button id="load-btn" class="btn">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
+          Load Data
+        </button>
+      </div>
+      <div id="load-status" style="margin-top:.5rem"></div>
     </div>
   </div>
 
@@ -171,10 +209,33 @@
           <div class="value" id="dir-pct"></div>
         </div>
         <div class="metric-card">
-          <div class="label">Mean Absolute Error</div>
+          <div class="label">MAE</div>
           <div class="value" id="mae"></div>
         </div>
+        <div class="metric-card">
+          <div class="label">MSE</div>
+          <div class="value" id="mse"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">RMSE</div>
+          <div class="value" id="rmse"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">MAPE</div>
+          <div class="value" id="mape"></div>
+        </div>
       </div>
+
+      <details class="card" style="cursor:pointer; margin-bottom:2rem">
+        <summary style="font-weight:600; font-size:.95rem; color:var(--accent-light)">What do these metrics mean?</summary>
+        <div style="margin-top:1rem; color:var(--muted); font-size:.88rem; line-height:1.7">
+          <p><strong style="color:var(--text)">Correct Direction</strong> &mdash; The percentage of days where the model correctly predicted whether the price would go up or down. Higher is better.</p>
+          <p style="margin-top:.6rem"><strong style="color:var(--text)">MAE (Mean Absolute Error)</strong> &mdash; The average absolute difference between predicted and actual prices. A MAE of $5 means the prediction is off by $5 on average. Lower is better.</p>
+          <p style="margin-top:.6rem"><strong style="color:var(--text)">MSE (Mean Squared Error)</strong> &mdash; The average of squared differences between predicted and actual prices. It penalises large errors more heavily than MAE. Lower is better.</p>
+          <p style="margin-top:.6rem"><strong style="color:var(--text)">RMSE (Root Mean Squared Error)</strong> &mdash; The square root of MSE, expressed in the same unit ($) as the price. It gives a sense of typical error magnitude while still penalising outliers. Lower is better.</p>
+          <p style="margin-top:.6rem"><strong style="color:var(--text)">MAPE (Mean Absolute Percentage Error)</strong> &mdash; The average prediction error expressed as a percentage of the actual price. A MAPE of 2% means the model is typically off by 2% of the real price. Lower is better.</p>
+        </div>
+      </details>
 
       <!-- Chart -->
       <div class="card">
@@ -265,46 +326,99 @@
   });
 
   /* ---------- State ---------- */
-  let allRows    = null;   // cached server data (sorted newest-first)
-  let allMae     = null;
-  let allDirPct  = null;
+  let allRows    = null;
   let priceChart = null;
 
-  const loadBtn   = document.getElementById("load-btn");
-  const loadStatus = document.getElementById("load-status");
-  const noDataMsg = document.getElementById("no-data-msg");
+  const loadBtn     = document.getElementById("load-btn");
+  const loadStatus  = document.getElementById("load-status");
+  const noDataMsg   = document.getElementById("no-data-msg");
   const predContent = document.getElementById("pred-content");
+  const startInput  = document.getElementById("start-date");
+  const endInput    = document.getElementById("end-date");
 
-  /* ---------- Load Data (explicit user action) ---------- */
+  /* ---------- Load data summary on page open ---------- */
+  (async () => {
+    const summaryLoader  = document.getElementById("summary-loader");
+    const summaryContent = document.getElementById("summary-content");
+    const summaryError   = document.getElementById("summary-error");
+    try {
+      const res = await fetch("/api/data-summary");
+      if (!res.ok) throw new Error("Server responded " + res.status);
+      const rows = await res.json();
+      if (rows.length === 0) {
+        summaryLoader.textContent = "No prediction data in the database yet.";
+        return;
+      }
+      const tbody = document.getElementById("summary-body");
+      rows.forEach(r => {
+        const tr = document.createElement("tr");
+        const minDate = r.min_date ? r.min_date.slice(0, 10) : "\u2014";
+        const maxDate = r.max_date ? r.max_date.slice(0, 10) : "\u2014";
+        tr.innerHTML =
+          "<td>" + (r.symbol || "\u2014") + "</td>" +
+          "<td>" + minDate + "</td>" +
+          "<td>" + maxDate + "</td>" +
+          "<td>" + (r.total_rows || 0) + "</td>" +
+          "<td>" + (r.rows_with_real || 0) + "</td>";
+        tbody.appendChild(tr);
+        // Pre-fill the date inputs with the available range
+        if (r.symbol === "GC=F") {
+          startInput.value = minDate;
+          endInput.value   = maxDate;
+          startInput.min   = minDate;
+          startInput.max   = maxDate;
+          endInput.min     = minDate;
+          endInput.max     = maxDate;
+        }
+      });
+      summaryLoader.style.display  = "none";
+      summaryContent.style.display = "block";
+    } catch (err) {
+      summaryLoader.style.display = "none";
+      summaryError.style.display  = "block";
+      summaryError.textContent    = "Could not load summary: " + err.message;
+    }
+  })();
+
+  /* ---------- Load Data (explicit user action, with date range) ---------- */
   loadBtn.addEventListener("click", async () => {
     loadBtn.disabled = true;
     loadBtn.textContent = "Loading\u2026";
     loadStatus.innerHTML = '<span style="color:var(--muted)">Fetching predictions from the server&hellip;</span>';
 
     try {
-      const res = await fetch("/api/predictions");
+      let url = "/api/predictions";
+      const params = [];
+      if (startInput.value) params.push("start=" + startInput.value);
+      if (endInput.value) params.push("end=" + endInput.value);
+      if (params.length) url += "?" + params.join("&");
+
+      const res = await fetch(url);
       if (!res.ok) throw new Error("Server responded " + res.status);
       const data = await res.json();
 
-      allRows   = data.rows;          // newest-first from API
-      allMae    = data.mae;
-      allDirPct = data.correct_direction_pct;
+      allRows = data.rows;
 
+      const rangeLabel = (startInput.value || "earliest") + " to " + (endInput.value || "latest");
       loadStatus.innerHTML =
         '<span style="color:var(--green)">\u2714 Loaded ' + allRows.length +
-        ' predictions.</span><br><span style="color:var(--muted);font-size:.85rem">' +
+        ' predictions (' + rangeLabel + ').</span><br>' +
+        '<span style="color:var(--muted);font-size:.85rem">' +
         'Switch to the <strong>Predictions</strong> tab to view results.</span>';
 
-      // Pre-render the Predictions tab with all data
-      noDataMsg.style.display  = "none";
+      noDataMsg.style.display   = "none";
       predContent.style.display = "block";
+      // Reset range filter to All
+      document.querySelectorAll(".range-btn").forEach(b => b.classList.remove("active"));
+      document.querySelector('.range-btn[data-days="0"]').classList.add("active");
       displayData(0);
     } catch (err) {
       loadStatus.innerHTML =
         '<span style="color:var(--red)">\u2716 Failed to load: ' + err.message + '</span>';
     } finally {
       loadBtn.disabled = false;
-      loadBtn.textContent = "Load Data";
+      loadBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg> Load Data';
     }
   });
 
@@ -312,7 +426,6 @@
   function displayData(days) {
     if (!allRows) return;
 
-    // Filter by days (0 = all)
     let rows = allRows;
     if (days > 0) {
       const cutoff = new Date();
@@ -321,7 +434,8 @@
     }
 
     // Recalculate metrics for the visible window
-    let correctCount = 0, totalDir = 0, absErrorSum = 0, maeCount = 0;
+    let correctCount = 0, totalDir = 0;
+    let absErrorSum = 0, sqErrorSum = 0, pctErrorSum = 0, errCount = 0;
     rows.forEach(r => {
       const dir = r.Correct_Direction;
       if (dir === true || dir === 1 || dir === false || dir === 0) {
@@ -329,17 +443,26 @@
         if (dir === true || dir === 1) correctCount++;
       }
       if (r.Real_Close != null && !isNaN(r.Real_Close) && r.Predicted_Close != null) {
-        absErrorSum += Math.abs(r.Real_Close - r.Predicted_Close);
-        maeCount++;
+        const diff = r.Real_Close - r.Predicted_Close;
+        absErrorSum += Math.abs(diff);
+        sqErrorSum  += diff * diff;
+        pctErrorSum += Math.abs(diff / r.Real_Close);
+        errCount++;
       }
     });
     const dirPct = totalDir > 0 ? (correctCount / totalDir * 100).toFixed(2) : "\u2014";
-    const mae    = maeCount > 0 ? (absErrorSum / maeCount).toFixed(2) : "\u2014";
+    const mae    = errCount > 0 ? (absErrorSum / errCount).toFixed(2) : "\u2014";
+    const mse    = errCount > 0 ? (sqErrorSum / errCount).toFixed(2) : "\u2014";
+    const rmse   = errCount > 0 ? Math.sqrt(sqErrorSum / errCount).toFixed(2) : "\u2014";
+    const mape   = errCount > 0 ? (pctErrorSum / errCount * 100).toFixed(2) : "\u2014";
 
     document.getElementById("dir-pct").textContent = dirPct + (dirPct !== "\u2014" ? "%" : "");
-    document.getElementById("mae").textContent     = mae !== "\u2014" ? "$" + mae : "\u2014";
+    document.getElementById("mae").textContent     = mae  !== "\u2014" ? "$" + mae  : "\u2014";
+    document.getElementById("mse").textContent     = mse  !== "\u2014" ? "$" + mse  : "\u2014";
+    document.getElementById("rmse").textContent    = rmse !== "\u2014" ? "$" + rmse : "\u2014";
+    document.getElementById("mape").textContent    = mape !== "\u2014" ? mape + "%" : "\u2014";
 
-    // Chart (chronological = reversed)
+    // Chart
     const sorted   = [...rows].reverse();
     const labels   = sorted.map(r => r.Date);
     const realData = sorted.map(r => r.Real_Close);

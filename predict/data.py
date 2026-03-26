@@ -254,28 +254,46 @@ class Predictor:
 
         print("real_close column updated for matching dates.")
 
-    def fetch_prediction_history(self, limit=None):
+    def fetch_data_summary(self):
+        """Return available date range and row count per symbol."""
+        query = text(f"""
+            SELECT symbol,
+                   MIN(date) AS min_date,
+                   MAX(date) AS max_date,
+                   COUNT(*) AS total_rows,
+                   COUNT(real_close) AS rows_with_real
+            FROM {self.TABLE_NAME}
+            GROUP BY symbol
+            ORDER BY symbol
+        """)
+        with self.engine.connect() as conn:
+            df = pd.read_sql(query, conn)
+        return df
+
+    def fetch_prediction_history(self, limit=None, start_date=None, end_date=None):
+        where_clauses = ["symbol = :symbol", "real_close IS NOT NULL"]
+        params = {"symbol": self.symbol}
+
+        if start_date:
+            where_clauses.append("date >= :start_date")
+            params["start_date"] = start_date
+        if end_date:
+            where_clauses.append("date <= :end_date")
+            params["end_date"] = end_date
+
+        where_sql = " AND ".join(where_clauses)
+        limit_sql = f"LIMIT :limit" if limit else ""
         if limit:
-            query = text(f"""
-                SELECT date AS "Date", symbol AS "Symbol",
-                       real_close AS "Real_Close", predicted_close AS "Predicted_Close"
-                FROM {self.TABLE_NAME}
-                WHERE symbol = :symbol
-                  AND real_close IS NOT NULL
-                ORDER BY date DESC
-                LIMIT :limit
-            """)
-            params = {"symbol": self.symbol, "limit": limit}
-        else:
-            query = text(f"""
-                SELECT date AS "Date", symbol AS "Symbol",
-                       real_close AS "Real_Close", predicted_close AS "Predicted_Close"
-                FROM {self.TABLE_NAME}
-                WHERE symbol = :symbol
-                  AND real_close IS NOT NULL
-                ORDER BY date DESC
-            """)
-            params = {"symbol": self.symbol}
+            params["limit"] = limit
+
+        query = text(f"""
+            SELECT date AS "Date", symbol AS "Symbol",
+                   real_close AS "Real_Close", predicted_close AS "Predicted_Close"
+            FROM {self.TABLE_NAME}
+            WHERE {where_sql}
+            ORDER BY date DESC
+            {limit_sql}
+        """)
 
         with self.engine.connect() as conn:
             df = pd.read_sql(query, conn, params=params)

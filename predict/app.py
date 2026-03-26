@@ -30,11 +30,35 @@ def index():
 
 # -- API --
 
+@app.route("/api/data-summary")
+def api_data_summary():
+    from sqlalchemy import create_engine, text
+    engine = create_engine(DATABASE_URL)
+    query = text("""
+        SELECT symbol,
+               MIN(date) AS min_date,
+               MAX(date) AS max_date,
+               COUNT(*) AS total_rows,
+               COUNT(real_close) AS rows_with_real
+        FROM predictions
+        GROUP BY symbol
+        ORDER BY symbol
+    """)
+    with engine.connect() as conn:
+        df = pd.read_sql(query, conn)
+    rows = json.loads(df.to_json(orient="records", date_format="iso"))
+    return _json_response(rows)
+
+
 @app.route("/api/predictions")
 def api_predictions():
     days = request.args.get("days", default=None, type=int)
+    start = request.args.get("start", default=None, type=str)
+    end = request.args.get("end", default=None, type=str)
     predictor = _get_predictor()
-    df, correct_direction_perc, mae = predictor.fetch_prediction_history(limit=days)
+    df, correct_direction_perc, mae = predictor.fetch_prediction_history(
+        limit=days, start_date=start, end_date=end
+    )
     df["Date"] = df["Date"].astype(str)
     # Replace NaN/None so JSON serialization doesn't produce invalid tokens
     rows = json.loads(df.to_json(orient="records"))
