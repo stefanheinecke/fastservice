@@ -68,74 +68,68 @@ class Predictor:
             "volatility_atr", "trend_ema_fast", "volume_obv"
         ]
         df = df[feature_cols]
+        num_features = len(feature_cols)
 
-        # Sliding window
+        # Sliding window — keep as 3D for proper LSTM input
         window_size = 100
         features, labels = [], []
 
         for i in range(window_size, len(df)):
-            window = df.iloc[i - window_size:i].values.flatten()
+            window = df.iloc[i - window_size:i].values  # (window_size, num_features)
             features.append(window)
             labels.append(df["Close"].values[i])
 
-        X = np.array(features)
+        X = np.array(features)                    # (samples, window_size, num_features)
         y = np.array(labels).reshape(-1, 1)
 
-        # Scaling
+        # Per-feature scaling across all windows
+        n_samples = X.shape[0]
+        X_flat = X.reshape(-1, num_features)
         X_scaler = MinMaxScaler()
+        X_flat_scaled = X_scaler.fit_transform(X_flat)
+        X_scaled = X_flat_scaled.reshape(n_samples, window_size, num_features)
+
         y_scaler = MinMaxScaler()
-        X_scaled = X_scaler.fit_transform(X)
         y_scaled = y_scaler.fit_transform(y)
 
-        # Train/test split
-        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=SEED)
+        # Chronological train/test split (no data leakage)
+        split_idx = int(len(X_scaled) * 0.8)
+        X_train, X_test = X_scaled[:split_idx], X_scaled[split_idx:]
+        y_train, y_test = y_scaled[:split_idx], y_scaled[split_idx:]
 
-        # Model
-        initializer = tf.keras.initializers.GlorotUniform(seed=SEED)
-
+        # Model — stacked LSTM with proper 3D input
         model = tf.keras.models.Sequential([
-            tf.keras.layers.Reshape((window_size, -1), input_shape=(X.shape[1],)),  # reshape to 3D
-            tf.keras.layers.LSTM(128, return_sequences=False),
+            tf.keras.layers.LSTM(128, return_sequences=True,
+                                 input_shape=(window_size, num_features)),
+            tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.LSTM(64, return_sequences=False),
             tf.keras.layers.BatchNormalization(),
             tf.keras.layers.Dropout(0.2),
-            tf.keras.layers.Dense(256, activation="relu"),
+            tf.keras.layers.Dense(128, activation="relu"),
             tf.keras.layers.Dense(1)
         ])
 
-        model.compile(optimizer="adam", loss="mse", metrics=["mae"])
-        model.fit(X_train, y_train, epochs=40, batch_size=16, verbose=0)
+        model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
+            loss="mse",
+            metrics=["mae"],
+        )
 
-        # initializer = tf.keras.initializers.GlorotUniform(seed=SEED)
+        early_stop = tf.keras.callbacks.EarlyStopping(
+            monitor="val_loss", patience=10, restore_best_weights=True
+        )
+        reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
+            monitor="val_loss", factor=0.5, patience=5, min_lr=1e-6
+        )
 
-        # model = tf.keras.models.Sequential([
-        #     tf.keras.layers.Reshape((window_size, -1), input_shape=(X.shape[1],)),  # Reshape to 3D for LSTM
-        #     tf.keras.layers.LSTM(128, return_sequences=False, kernel_initializer=initializer),
-        #     tf.keras.layers.BatchNormalization(),
-        #     tf.keras.layers.Dropout(0.2),
-        #     tf.keras.layers.Dense(256, activation="relu", kernel_initializer=initializer),
-        #     tf.keras.layers.Dense(1, kernel_initializer=initializer)  # Output: predicted price
-        # ])
-
-        # model.compile(
-        #     optimizer="adam",
-        #     loss="mse",
-        #     metrics=["mae"]
-        # )
-
-        # early_stop = tf.keras.callbacks.EarlyStopping(
-        #     monitor="val_loss",
-        #     patience=10,
-        #     restore_best_weights=True
-        # )
-
-        # model.fit(
-        #     X_train, y_train,
-        #     epochs=10,
-        #     batch_size=16,
-        #     validation_split=0.2,
-        #     callbacks=[early_stop],
-        #     verbose=0
-        # )
+        model.fit(
+            X_train, y_train,
+            epochs=100,
+            batch_size=32,
+            validation_split=0.15,
+            callbacks=[early_stop, reduce_lr],
+            verbose=0,
+        )
 
         # Evaluation
         loss, mae = model.evaluate(X_test, y_test, verbose=0)
@@ -159,17 +153,17 @@ class Predictor:
         num_predictions = len(df) - window_size
         preds = []
         for i in range(-num_predictions, 0):
-            w = df.iloc[i - window_size:i].values.flatten().reshape(1, -1)
-            ws = X_scaler.transform(w)
+            w = df.iloc[i - window_size:i].values          # (window_size, num_features)
+            ws = X_scaler.transform(w.reshape(-1, num_features)).reshape(1, window_size, num_features)
             p = model.predict(ws)
             preds.append(y_scaler.inverse_transform(p)[0][0])
         preds = np.array(preds)
 
-        # Forecast future
+        # Forecast future (1 day)
         future_preds = []
         latest_window = df.iloc[-window_size:].values.copy()
         for _ in range(1):
-            inp = X_scaler.transform(latest_window.flatten().reshape(1, -1))
+            inp = X_scaler.transform(latest_window.reshape(-1, num_features)).reshape(1, window_size, num_features)
             p = model.predict(inp)
             unscaled = y_scaler.inverse_transform(p)[0][0]
             future_preds.append(unscaled)
