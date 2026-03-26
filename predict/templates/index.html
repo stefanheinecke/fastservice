@@ -240,10 +240,6 @@
           <div class="value" id="mae"></div>
         </div>
         <div class="metric-card">
-          <div class="label">MSE</div>
-          <div class="value" id="mse"></div>
-        </div>
-        <div class="metric-card">
           <div class="label">RMSE</div>
           <div class="value" id="rmse"></div>
         </div>
@@ -258,8 +254,7 @@
         <div style="margin-top:1rem; color:var(--muted); font-size:.88rem; line-height:1.7">
           <p><strong style="color:var(--text)">Correct Direction</strong> &mdash; The percentage of days where the model correctly predicted whether the price would go up or down. Higher is better.</p>
           <p style="margin-top:.6rem"><strong style="color:var(--text)">MAE (Mean Absolute Error)</strong> &mdash; The average absolute difference between predicted and actual prices. A MAE of $5 means the prediction is off by $5 on average. Lower is better.</p>
-          <p style="margin-top:.6rem"><strong style="color:var(--text)">MSE (Mean Squared Error)</strong> &mdash; The average of squared differences between predicted and actual prices. It penalises large errors more heavily than MAE. Lower is better.</p>
-          <p style="margin-top:.6rem"><strong style="color:var(--text)">RMSE (Root Mean Squared Error)</strong> &mdash; The square root of MSE, expressed in the same unit ($) as the price. It gives a sense of typical error magnitude while still penalising outliers. Lower is better.</p>
+          <p style="margin-top:.6rem"><strong style="color:var(--text)">RMSE (Root Mean Squared Error)</strong> &mdash; Like MAE but penalises large errors more heavily. Expressed in dollars, it gives a sense of typical error magnitude. Lower is better.</p>
           <p style="margin-top:.6rem"><strong style="color:var(--text)">MAPE (Mean Absolute Percentage Error)</strong> &mdash; The average prediction error expressed as a percentage of the actual price. A MAPE of 2% means the model is typically off by 2% of the real price. Lower is better.</p>
         </div>
       </details>
@@ -317,7 +312,7 @@
       </p>
       <p>
         Once trained, the model predicts future prices and evaluates its performance using metrics
-        such as MSE, MAE, RMSE, MAPE, and directional accuracy. These metrics help assess
+        such as MAE, RMSE, MAPE, and directional accuracy. These metrics help assess
         not just how close the predictions are, but whether the model correctly anticipates
         upward or downward movements.
       </p>
@@ -473,8 +468,11 @@
       });
       if (!res.ok) throw new Error("Server responded " + res.status);
       const data = await res.json();
-      triggerStatus.innerHTML =
-        '<span style="color:var(--green)">\u2714 ' + data.message + '</span>';
+      let msg = '\u2714 ' + data.message;
+      if (data.min_date && data.max_date) {
+        msg += ' (' + data.min_date + ' to ' + data.max_date + ', ' + data.total_rows + ' rows)';
+      }
+      triggerStatus.innerHTML = '<span style="color:var(--green)">' + msg + '</span>';
       // Refresh the summary table to show the new ticker
       await loadSummary();
     } catch (err) {
@@ -555,13 +553,11 @@
     });
     const dirPct = totalDir > 0 ? (correctCount / totalDir * 100).toFixed(2) : "\u2014";
     const mae    = errCount > 0 ? (absErrorSum / errCount).toFixed(2) : "\u2014";
-    const mse    = errCount > 0 ? (sqErrorSum / errCount).toFixed(2) : "\u2014";
     const rmse   = errCount > 0 ? Math.sqrt(sqErrorSum / errCount).toFixed(2) : "\u2014";
     const mape   = errCount > 0 ? (pctErrorSum / errCount * 100).toFixed(2) : "\u2014";
 
     document.getElementById("dir-pct").textContent = dirPct + (dirPct !== "\u2014" ? "%" : "");
     document.getElementById("mae").textContent     = mae  !== "\u2014" ? "$" + mae  : "\u2014";
-    document.getElementById("mse").textContent     = mse  !== "\u2014" ? "$" + mse  : "\u2014";
     document.getElementById("rmse").textContent    = rmse !== "\u2014" ? "$" + rmse : "\u2014";
     document.getElementById("mape").textContent    = mape !== "\u2014" ? mape + "%" : "\u2014";
 

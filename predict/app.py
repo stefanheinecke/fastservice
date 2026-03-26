@@ -89,7 +89,16 @@ def store_predictions():
     predictor.store_predictions(past_df)
     predictor.store_predictions(forecast_df)
     predictor.update_with_real_close(df)
-    return _json_response({"message": f"Predictions for {symbol} stored successfully."})
+    all_preds = pd.concat([past_df, forecast_df])
+    min_date = str(all_preds["Date"].min())
+    max_date = str(all_preds["Date"].max())
+    total = len(all_preds)
+    return _json_response({
+        "message": f"Predictions for {symbol} stored successfully.",
+        "min_date": min_date,
+        "max_date": max_date,
+        "total_rows": total,
+    })
 
 
 @app.route("/robots.txt")
