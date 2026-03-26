@@ -60,29 +60,44 @@ class Predictor:
         df.index = pd.to_datetime(df.index).date
         df["Date"] = df.index
 
+        # --- Return-based features (stationary, direction-aware) ---
+        df["return_1d"] = df["Close"].pct_change()
+        df["return_5d"] = df["Close"].pct_change(5)
+        df["return_10d"] = df["Close"].pct_change(10)
+        df["return_20d"] = df["Close"].pct_change(20)
+        df["rolling_vol_10"] = df["return_1d"].rolling(10).std()
+        df["rolling_vol_20"] = df["return_1d"].rolling(20).std()
+        df["close_to_ema"] = df["Close"] / df["trend_ema_fast"] - 1
+        df.dropna(inplace=True)
+
         # Feature setup
         feature_cols = [
             "Open", "High", "Low", "Close", "Volume",
             "momentum_rsi", "trend_macd", "momentum_stoch",
             "volatility_bbm", "volatility_bbh", "volatility_bbl",
-            "volatility_atr", "trend_ema_fast", "volume_obv"
+            "volatility_atr", "trend_ema_fast", "volume_obv",
+            "return_1d", "return_5d", "return_10d", "return_20d",
+            "rolling_vol_10", "rolling_vol_20", "close_to_ema",
         ]
+        close_prices = df["Close"].values.copy()
         df = df[feature_cols]
         num_features = len(feature_cols)
 
-        # Sliding window — keep as 3D for proper LSTM input
-        window_size = 100
+        # Target: next-day log return (stationary) instead of absolute price
+        log_returns = np.log(close_prices[1:] / close_prices[:-1])
+
+        # Sliding window — 3D for LSTM
+        window_size = 60
         features, labels = [], []
-
         for i in range(window_size, len(df)):
-            window = df.iloc[i - window_size:i].values  # (window_size, num_features)
+            window = df.iloc[i - window_size:i].values
             features.append(window)
-            labels.append(df["Close"].values[i])
+            labels.append(log_returns[i - 1])
 
-        X = np.array(features)                    # (samples, window_size, num_features)
+        X = np.array(features)
         y = np.array(labels).reshape(-1, 1)
 
-        # Per-feature scaling across all windows
+        # Per-feature scaling
         n_samples = X.shape[0]
         X_flat = X.reshape(-1, num_features)
         X_scaler = MinMaxScaler()
@@ -92,31 +107,31 @@ class Predictor:
         y_scaler = MinMaxScaler()
         y_scaled = y_scaler.fit_transform(y)
 
-        # Chronological train/test split (no data leakage)
+        # Chronological train/test split
         split_idx = int(len(X_scaled) * 0.8)
         X_train, X_test = X_scaled[:split_idx], X_scaled[split_idx:]
         y_train, y_test = y_scaled[:split_idx], y_scaled[split_idx:]
 
-        # Model — stacked LSTM with proper 3D input
+        # Stacked LSTM with Huber loss
         model = tf.keras.models.Sequential([
             tf.keras.layers.LSTM(128, return_sequences=True,
                                  input_shape=(window_size, num_features)),
-            tf.keras.layers.Dropout(0.2),
+            tf.keras.layers.Dropout(0.25),
             tf.keras.layers.LSTM(64, return_sequences=False),
             tf.keras.layers.BatchNormalization(),
-            tf.keras.layers.Dropout(0.2),
-            tf.keras.layers.Dense(128, activation="relu"),
+            tf.keras.layers.Dropout(0.25),
+            tf.keras.layers.Dense(64, activation="relu"),
             tf.keras.layers.Dense(1)
         ])
 
         model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-            loss="mse",
+            optimizer=tf.keras.optimizers.Adam(learning_rate=5e-4),
+            loss=tf.keras.losses.Huber(delta=1.0),
             metrics=["mae"],
         )
 
         early_stop = tf.keras.callbacks.EarlyStopping(
-            monitor="val_loss", patience=10, restore_best_weights=True
+            monitor="val_loss", patience=12, restore_best_weights=True
         )
         reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
             monitor="val_loss", factor=0.5, patience=5, min_lr=1e-6
@@ -124,68 +139,70 @@ class Predictor:
 
         model.fit(
             X_train, y_train,
-            epochs=100,
+            epochs=150,
             batch_size=32,
             validation_split=0.15,
             callbacks=[early_stop, reduce_lr],
             verbose=0,
         )
 
-        # Evaluation
-        loss, mae = model.evaluate(X_test, y_test, verbose=0)
-        y_pred_scaled = model.predict(X_test)
-        y_pred = y_scaler.inverse_transform(y_pred_scaled).flatten()
-        y_true = y_scaler.inverse_transform(y_test).flatten()
-        real_mae = np.mean(np.abs(y_true - y_pred))
-        rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-        mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
-        direction_acc = np.mean((np.diff(y_true) > 0) == (np.diff(y_pred) > 0))
+        # --- Evaluation ---
+        y_pred_scaled = model.predict(X_test, verbose=0)
+        y_pred_ret = y_scaler.inverse_transform(y_pred_scaled).flatten()
+        y_true_ret = y_scaler.inverse_transform(y_test).flatten()
+
+        # Convert returns → prices for error metrics
+        test_base = close_prices[window_size + split_idx - 1:
+                                 window_size + split_idx - 1 + len(y_true_ret)]
+        y_pred_prices = test_base * np.exp(y_pred_ret)
+        y_true_prices = test_base * np.exp(y_true_ret)
+
+        real_mae = np.mean(np.abs(y_true_prices - y_pred_prices))
+        rmse = np.sqrt(mean_squared_error(y_true_prices, y_pred_prices))
+        mape = np.mean(np.abs((y_true_prices - y_pred_prices) / y_true_prices)) * 100
+        direction_acc = np.mean((y_true_ret > 0) == (y_pred_ret > 0))
 
         print(f"Evaluation Metrics for {self.symbol}:")
-        print(f" - Scaled Loss (MSE): {loss:.4f}")
-        print(f" - Scaled MAE: {mae:.4f}")
-        print(f" - Real MAE: {real_mae:.4f}")
-        print(f" - RMSE: {rmse:.4f}")
+        print(f" - Real MAE: ${real_mae:.2f}")
+        print(f" - RMSE: ${rmse:.2f}")
         print(f" - MAPE: {mape:.2f}%")
-        print(f" - Directional Accuracy: {direction_acc:.2f}")
+        print(f" - Directional Accuracy: {direction_acc:.2%}")
 
-        # Rolling predictions over all available data (after the initial training window)
+        # --- Rolling predictions → convert back to prices ---
         num_predictions = len(df) - window_size
-        preds = []
+        pred_returns = []
         for i in range(-num_predictions, 0):
-            w = df.iloc[i - window_size:i].values          # (window_size, num_features)
+            w = df.iloc[i - window_size:i].values
             ws = X_scaler.transform(w.reshape(-1, num_features)).reshape(1, window_size, num_features)
-            p = model.predict(ws)
-            preds.append(y_scaler.inverse_transform(p)[0][0])
-        preds = np.array(preds)
+            p = model.predict(ws, verbose=0)
+            pred_returns.append(y_scaler.inverse_transform(p)[0][0])
+        pred_returns = np.array(pred_returns)
+
+        # Predicted log return → predicted close price
+        base_prices = close_prices[window_size - 1:-1]
+        preds = base_prices * np.exp(pred_returns)
 
         # Forecast future (1 day)
-        future_preds = []
         latest_window = df.iloc[-window_size:].values.copy()
-        for _ in range(1):
-            inp = X_scaler.transform(latest_window.reshape(-1, num_features)).reshape(1, window_size, num_features)
-            p = model.predict(inp)
-            unscaled = y_scaler.inverse_transform(p)[0][0]
-            future_preds.append(unscaled)
-            last_day = df.iloc[-1].copy()
-            last_day["Close"] = unscaled
-            latest_window = np.vstack((latest_window[1:], last_day.values))
+        inp = X_scaler.transform(latest_window.reshape(-1, num_features)).reshape(1, window_size, num_features)
+        p = model.predict(inp, verbose=0)
+        future_ret = y_scaler.inverse_transform(p)[0][0]
+        future_price = close_prices[-1] * np.exp(future_ret)
 
-        # 🧮 Display 1-Day Forecasted Price
+        # Build DataFrames
         past_dates = pd.date_range(end=df.index[-1], periods=num_predictions, freq="B").strftime("%Y-%m-%d")
         past_df = pd.DataFrame({
-            "id": [str(uuid.uuid4()) for _ in range(num_predictions)],    
+            "id": [str(uuid.uuid4()) for _ in range(num_predictions)],
             "Date": past_dates,
-            "Predicted_Close": np.round(preds, 2)
+            "Predicted_Close": np.round(preds, 2),
         })
         past_df["Symbol"] = self.symbol
-        #past_df["Created_at"] = pd.Timestamp.today().date()
 
         future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=1, freq="B").strftime("%Y-%m-%d")
         forecast_df = pd.DataFrame({
-            "id": [str(uuid.uuid4()) for _ in range(1)],    
+            "id": [str(uuid.uuid4()) for _ in range(1)],
             "Date": future_dates,
-            "Predicted_Close": np.round(future_preds, 2)
+            "Predicted_Close": [round(future_price, 2)],
         })
         forecast_df["Symbol"] = self.symbol
         return forecast_df, past_df, df
