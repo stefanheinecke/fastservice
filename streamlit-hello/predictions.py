@@ -9,6 +9,7 @@ import random
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
+from google.cloud import bigquery
 import matplotlib.pyplot as plt
 
 # Fix randomness
@@ -33,10 +34,10 @@ def load_data():
     return df.dropna()
 
 df = load_data()
-df.index = pd.to_datetime(df.index)
-df["Date"] = df.index.date
+df.index = pd.to_datetime(df.index).date
+df["Date"] = df.index
 st.subheader("📈 Historical Data Preview")
-st.dataframe(df.tail(10), use_container_width=True)
+st.dataframe(df.tail(10), width='stretch')
 
 # Feature setup
 feature_cols = [
@@ -88,9 +89,9 @@ mape = np.mean(np.abs((y_true - y_pred) / y_true)) * 100
 direction_acc = np.mean((np.diff(y_true) > 0) == (np.diff(y_pred) > 0))
 
 st.subheader("📊 Model Evaluation")
-st.metric("MAE", f"${real_mae:.2f}")
-st.metric("RMSE", f"${rmse:.2f}")
-st.metric("MAPE", f"{mape:.2f}%")
+st.metric("Mean Absolute Error (MAE)", f"${real_mae:.2f}")
+st.metric("Root Mean Squared Error (RMSE)", f"${rmse:.2f}")
+st.metric("Mean Absolute Percentage Error (MAPE)", f"{mape:.2f}%")
 st.metric("Directional Accuracy", f"{direction_acc*100:.2f}%")
 
 # Rolling predictions
@@ -127,12 +128,34 @@ st.pyplot(fig)
 
 # 🧮 Display 5-Day Forecasted Prices
 st.subheader("🔮 Next 5-Day Forecast")
-future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=5, freq="B")
+future_dates = pd.date_range(start=df.index[-1] + pd.Timedelta(days=1), periods=5, freq="B").strftime("%Y-%m-%d")
 forecast_df = pd.DataFrame({
     "Date": future_dates,
     "Predicted_Close": np.round(future_preds, 2)
 })
-st.dataframe(forecast_df, use_container_width=True)
+st.dataframe(forecast_df, width='stretch')
+
+# Store forecast_df in BigQuery
+
+# The BigQuery table must have the following fields (columns):
+# - Date (STRING or DATE)
+# - Predicted_Close (FLOAT)
+
+# Set your project and table details
+project_id = "my-sh-project-398715"
+dataset_id = "predict_data"
+table_id = "prediction"
+
+client = bigquery.Client(project=project_id)
+table_ref = f"{project_id}.{dataset_id}.{table_id}"
+
+# job = client.load_table_from_dataframe(
+#     forecast_df,
+#     table_ref,
+#     job_config=bigquery.LoadJobConfig(write_disposition="WRITE_APPEND")
+# )
+# job.result()  # Wait for the job to complete
+st.success("Forecast uploaded to BigQuery!")
 
 csv = forecast_df.to_csv(index=False).encode("utf-8")
 st.download_button("📥 Download CSV Report", data=csv, file_name="sx5e_prediction_report.csv", mime="text/csv")
