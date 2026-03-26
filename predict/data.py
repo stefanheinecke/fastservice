@@ -7,7 +7,7 @@ import tensorflow as tf
 import os
 import random
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error
 from sqlalchemy import create_engine, text
 import matplotlib.pyplot as plt
@@ -60,7 +60,7 @@ class Predictor:
         df.index = pd.to_datetime(df.index).date
         df["Date"] = df.index
 
-        # --- Return-based features (stationary, direction-aware) ---
+        # --- Return-based features ---
         df["return_1d"] = df["Close"].pct_change()
         df["return_5d"] = df["Close"].pct_change(5)
         df["return_10d"] = df["Close"].pct_change(10)
@@ -70,7 +70,6 @@ class Predictor:
         df["close_to_ema"] = df["Close"] / df["trend_ema_fast"] - 1
         df.dropna(inplace=True)
 
-        # Feature setup
         feature_cols = [
             "Open", "High", "Low", "Close", "Volume",
             "momentum_rsi", "trend_macd", "momentum_stoch",
@@ -83,10 +82,9 @@ class Predictor:
         df = df[feature_cols]
         num_features = len(feature_cols)
 
-        # Target: next-day log return (stationary) instead of absolute price
+        # Target: raw log returns (no scaler — preserves sign for direction)
         log_returns = np.log(close_prices[1:] / close_prices[:-1])
 
-        # Sliding window — 3D for LSTM
         window_size = 60
         features, labels = [], []
         for i in range(window_size, len(df)):
@@ -95,63 +93,65 @@ class Predictor:
             labels.append(log_returns[i - 1])
 
         X = np.array(features)
-        y = np.array(labels).reshape(-1, 1)
+        y = np.array(labels).reshape(-1, 1)  # raw log returns, no scaling
 
-        # Per-feature scaling
+        # StandardScaler on features (handles outliers much better than MinMaxScaler)
         n_samples = X.shape[0]
         X_flat = X.reshape(-1, num_features)
-        X_scaler = MinMaxScaler()
+        X_scaler = StandardScaler()
         X_flat_scaled = X_scaler.fit_transform(X_flat)
         X_scaled = X_flat_scaled.reshape(n_samples, window_size, num_features)
 
-        y_scaler = MinMaxScaler()
-        y_scaled = y_scaler.fit_transform(y)
-
-        # Chronological train/test split
+        # Chronological split
         split_idx = int(len(X_scaled) * 0.8)
         X_train, X_test = X_scaled[:split_idx], X_scaled[split_idx:]
-        y_train, y_test = y_scaled[:split_idx], y_scaled[split_idx:]
+        y_train, y_test = y[:split_idx], y[split_idx:]
 
-        # Stacked LSTM with Huber loss
+        # Custom loss: MSE + directional penalty
+        def direction_aware_loss(y_true, y_pred):
+            mse = tf.reduce_mean(tf.square(y_true - y_pred))
+            # Penalise when predicted sign differs from true sign
+            sign_penalty = tf.reduce_mean(tf.nn.relu(-y_true * y_pred))
+            return mse + 2.0 * sign_penalty
+
+        # Lighter model to reduce overfitting on ~1000 samples
         model = tf.keras.models.Sequential([
-            tf.keras.layers.LSTM(128, return_sequences=True,
+            tf.keras.layers.LSTM(64, return_sequences=True,
                                  input_shape=(window_size, num_features)),
-            tf.keras.layers.Dropout(0.25),
-            tf.keras.layers.LSTM(64, return_sequences=False),
-            tf.keras.layers.BatchNormalization(),
-            tf.keras.layers.Dropout(0.25),
-            tf.keras.layers.Dense(64, activation="relu"),
+            tf.keras.layers.Dropout(0.3),
+            tf.keras.layers.LSTM(32, return_sequences=False),
+            tf.keras.layers.Dropout(0.3),
+            tf.keras.layers.Dense(32, activation="relu"),
             tf.keras.layers.Dense(1)
         ])
 
         model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=5e-4),
-            loss=tf.keras.losses.Huber(delta=1.0),
+            loss=direction_aware_loss,
             metrics=["mae"],
         )
 
         early_stop = tf.keras.callbacks.EarlyStopping(
-            monitor="val_loss", patience=12, restore_best_weights=True
+            monitor="val_loss", patience=15, restore_best_weights=True
         )
         reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
-            monitor="val_loss", factor=0.5, patience=5, min_lr=1e-6
+            monitor="val_loss", factor=0.5, patience=6, min_lr=1e-6
         )
 
         model.fit(
             X_train, y_train,
-            epochs=150,
-            batch_size=32,
+            epochs=200,
+            batch_size=64,
             validation_split=0.15,
             callbacks=[early_stop, reduce_lr],
             verbose=0,
         )
 
         # --- Evaluation ---
-        y_pred_scaled = model.predict(X_test, verbose=0)
-        y_pred_ret = y_scaler.inverse_transform(y_pred_scaled).flatten()
-        y_true_ret = y_scaler.inverse_transform(y_test).flatten()
+        y_pred_ret = model.predict(X_test, verbose=0).flatten()
+        y_true_ret = y_test.flatten()
 
-        # Convert returns → prices for error metrics
+        # Convert returns → prices for display metrics
         test_base = close_prices[window_size + split_idx - 1:
                                  window_size + split_idx - 1 + len(y_true_ret)]
         y_pred_prices = test_base * np.exp(y_pred_ret)
@@ -175,10 +175,9 @@ class Predictor:
             w = df.iloc[i - window_size:i].values
             ws = X_scaler.transform(w.reshape(-1, num_features)).reshape(1, window_size, num_features)
             p = model.predict(ws, verbose=0)
-            pred_returns.append(y_scaler.inverse_transform(p)[0][0])
+            pred_returns.append(p[0][0])
         pred_returns = np.array(pred_returns)
 
-        # Predicted log return → predicted close price
         base_prices = close_prices[window_size - 1:-1]
         preds = base_prices * np.exp(pred_returns)
 
@@ -186,8 +185,7 @@ class Predictor:
         latest_window = df.iloc[-window_size:].values.copy()
         inp = X_scaler.transform(latest_window.reshape(-1, num_features)).reshape(1, window_size, num_features)
         p = model.predict(inp, verbose=0)
-        future_ret = y_scaler.inverse_transform(p)[0][0]
-        future_price = close_prices[-1] * np.exp(future_ret)
+        future_price = close_prices[-1] * np.exp(p[0][0])
 
         # Build DataFrames
         past_dates = pd.date_range(end=df.index[-1], periods=num_predictions, freq="B").strftime("%Y-%m-%d")
