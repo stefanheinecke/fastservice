@@ -422,6 +422,8 @@
 
   function populateTickerDropdowns() {
     const symbols = summaryData.map(r => r.symbol).filter(Boolean).sort();
+    const prevFilter = filterTicker.value;
+    const prevPred   = predTicker.value || currentTicker;
 
     // Filter dropdown
     filterTicker.innerHTML = '<option value="">All</option>';
@@ -430,6 +432,7 @@
       o.value = s; o.textContent = s;
       filterTicker.appendChild(o);
     });
+    if (prevFilter && symbols.includes(prevFilter)) filterTicker.value = prevFilter;
 
     // Predictions dropdown
     predTicker.innerHTML = '<option value="">Select ticker&hellip;</option>';
@@ -439,8 +442,12 @@
       predTicker.appendChild(o);
     });
 
-    // Auto-select first ticker in predictions if available
-    if (symbols.length > 0) {
+    // Restore previous selection, or auto-select first on initial load
+    if (prevPred && symbols.includes(prevPred)) {
+      predTicker.value = prevPred;
+      // Only load if we don't already have data for this ticker
+      if (currentTicker !== prevPred) loadPredictions(prevPred);
+    } else if (!currentTicker && symbols.length > 0) {
       predTicker.value = symbols[0];
       loadPredictions(symbols[0]);
     }
