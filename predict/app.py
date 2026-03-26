@@ -101,6 +101,23 @@ def store_predictions():
     })
 
 
+@app.route("/api/flush_predictions", methods=["POST"])
+def flush_predictions():
+    from sqlalchemy import create_engine, text as sa_text
+    body = request.get_json(silent=True) or {}
+    symbol = body.get("symbol", "").strip().upper()
+    if not symbol:
+        return _json_response({"error": "No symbol provided."}), 400
+    engine = create_engine(DATABASE_URL)
+    with engine.begin() as conn:
+        result = conn.execute(
+            sa_text("DELETE FROM predictions WHERE symbol = :symbol"),
+            {"symbol": symbol},
+        )
+        deleted = result.rowcount
+    return _json_response({"message": f"Deleted {deleted} rows for {symbol}.", "deleted": deleted})
+
+
 @app.route("/robots.txt")
 def robots():
     return send_file("robots.txt", mimetype="text/plain")

@@ -198,6 +198,27 @@
       </div>
       <div id="trigger-status" style="margin-top:.5rem"></div>
     </div>
+
+    <!-- Flush ticker data -->
+    <div class="card">
+      <h2>Flush Ticker Data</h2>
+      <p style="color:var(--muted); margin-bottom:1rem">
+        Remove all stored predictions for a ticker. This cannot be undone.
+      </p>
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.25rem">
+        <div>
+          <label class="form-label" for="flush-ticker">Ticker</label>
+          <select id="flush-ticker" class="form-select">
+            <option value="">Select ticker&hellip;</option>
+          </select>
+        </div>
+        <button id="flush-btn" class="btn" style="background:var(--red);border-color:var(--red)">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg>
+          Flush
+        </button>
+      </div>
+      <div id="flush-status" style="margin-top:.5rem"></div>
+    </div>
   </div>
 
   <!-- ==================== Predictions ==================== -->
@@ -434,6 +455,16 @@
     });
     if (prevFilter && symbols.includes(prevFilter)) filterTicker.value = prevFilter;
 
+    // Flush dropdown
+    const prevFlush = flushTicker.value;
+    flushTicker.innerHTML = '<option value="">Select ticker&hellip;</option>';
+    symbols.forEach(s => {
+      const o = document.createElement("option");
+      o.value = s; o.textContent = s;
+      flushTicker.appendChild(o);
+    });
+    if (prevFlush && symbols.includes(prevFlush)) flushTicker.value = prevFlush;
+
     // Predictions dropdown
     predTicker.innerHTML = '<option value="">Select ticker&hellip;</option>';
     symbols.forEach(s => {
@@ -452,6 +483,10 @@
       loadPredictions(symbols[0]);
     }
   }
+
+  const flushTicker = document.getElementById("flush-ticker");
+  const flushBtn     = document.getElementById("flush-btn");
+  const flushStatus  = document.getElementById("flush-status");
 
   filterTicker.addEventListener("change", renderSummary);
   filterDate.addEventListener("change", renderSummary);
@@ -489,6 +524,45 @@
       triggerBtn.disabled = false;
       triggerBtn.innerHTML =
         '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg> Generate &amp; Store';
+    }
+  });
+
+  /* ========== Flush ticker ========== */
+  flushBtn.addEventListener("click", async () => {
+    const symbol = flushTicker.value;
+    if (!symbol) {
+      flushStatus.innerHTML = '<span style="color:var(--red)">Please select a ticker.</span>';
+      return;
+    }
+    if (!confirm("Delete all predictions for " + symbol + "? This cannot be undone.")) return;
+
+    flushBtn.disabled = true;
+    flushBtn.textContent = "Deleting\u2026";
+    flushStatus.innerHTML = '<span style="color:var(--muted)">Removing data for ' + symbol + '&hellip;</span>';
+
+    try {
+      const res = await fetch("/api/flush_predictions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: symbol })
+      });
+      if (!res.ok) throw new Error("Server responded " + res.status);
+      const data = await res.json();
+      flushStatus.innerHTML = '<span style="color:var(--green)">\u2714 ' + data.message + '</span>';
+      // If the flushed ticker was being viewed, clear predictions
+      if (currentTicker === symbol) {
+        allRows = null;
+        currentTicker = null;
+        predContent.style.display     = "none";
+        predPlaceholder.style.display = "block";
+      }
+      await loadSummary();
+    } catch (err) {
+      flushStatus.innerHTML = '<span style="color:var(--red)">\u2716 Failed: ' + err.message + '</span>';
+    } finally {
+      flushBtn.disabled = false;
+      flushBtn.innerHTML =
+        '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/></svg> Flush';
     }
   });
 
