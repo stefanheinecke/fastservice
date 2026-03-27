@@ -187,11 +187,11 @@ class Predictor:
         p = model.predict(inp, verbose=0)
         future_price = close_prices[-1] * np.exp(p[0][0])
 
-        # Build DataFrames
-        past_dates = pd.date_range(end=df.index[-1], periods=num_predictions, freq="B").strftime("%Y-%m-%d")
+        # Build DataFrames — use actual trading dates, NOT generated business days
+        actual_dates = [str(d) for d in list(df.index)[window_size:]]
         past_df = pd.DataFrame({
             "id": [str(uuid.uuid4()) for _ in range(num_predictions)],
-            "Date": past_dates,
+            "Date": actual_dates,
             "Predicted_Close": np.round(preds, 2),
         })
         past_df["Symbol"] = self.symbol
