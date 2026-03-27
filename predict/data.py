@@ -68,6 +68,14 @@ class Predictor:
         df["rolling_vol_10"] = df["return_1d"].rolling(10).std()
         df["rolling_vol_20"] = df["return_1d"].rolling(20).std()
         df["close_to_ema"] = df["Close"] / df["trend_ema_fast"] - 1
+        # Directional / momentum features
+        df["roc_5"] = df["Close"].pct_change(5)  # rate of change
+        df["roc_10"] = df["Close"].pct_change(10)
+        df["ma5"] = df["Close"].rolling(5).mean()
+        df["ma20"] = df["Close"].rolling(20).mean()
+        df["ma_cross"] = df["ma5"] / df["ma20"] - 1  # >0 = bullish, <0 = bearish
+        df["high_low_range"] = (df["High"] - df["Low"]) / df["Close"]
+        df["close_position"] = (df["Close"] - df["Low"]) / (df["High"] - df["Low"] + 1e-8)  # where close sits in day's range
         df.dropna(inplace=True)
 
         feature_cols = [
@@ -77,6 +85,7 @@ class Predictor:
             "volatility_atr", "trend_ema_fast", "volume_obv",
             "return_1d", "return_5d", "return_10d", "return_20d",
             "rolling_vol_10", "rolling_vol_20", "close_to_ema",
+            "roc_5", "roc_10", "ma_cross", "high_low_range", "close_position",
         ]
         close_prices = df["Close"].values.copy()
         df = df[feature_cols]
@@ -85,7 +94,7 @@ class Predictor:
         # Target: raw log returns (no scaler — preserves sign for direction)
         log_returns = np.log(close_prices[1:] / close_prices[:-1])
 
-        window_size = 60
+        window_size = 30
         features, labels = [], []
         for i in range(window_size, len(df)):
             window = df.iloc[i - window_size:i].values
@@ -112,7 +121,7 @@ class Predictor:
             mse = tf.reduce_mean(tf.square(y_true - y_pred))
             # Penalise when predicted sign differs from true sign
             sign_penalty = tf.reduce_mean(tf.nn.relu(-y_true * y_pred))
-            return mse + 2.0 * sign_penalty
+            return mse + 5.0 * sign_penalty
 
         # Lighter model to reduce overfitting on ~1000 samples
         model = tf.keras.models.Sequential([
