@@ -137,6 +137,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="predictions">Predictions</button>
     <button class="tab-btn" data-tab="load-data">Load Data</button>
+    <button class="tab-btn" data-tab="api">API</button>
     <button class="tab-btn" data-tab="about">About</button>
     <button class="tab-btn" data-tab="contact">Contact</button>
     <button class="tab-btn" data-tab="privacy">Privacy Policy</button>
@@ -351,6 +352,100 @@
         not just how close the predictions are, but whether the model correctly anticipates
         upward or downward movements.
       </p>
+    </div>
+  </div>
+
+  <!-- ==================== API ==================== -->
+  <div id="api" class="tab-panel">
+    <div class="card prose">
+      <h2>API Documentation</h2>
+      <p>Access prediction data programmatically using the REST endpoints below. All responses are JSON.</p>
+
+      <h3>List All Tickers</h3>
+      <p>Returns an array of all loaded ticker symbols with their date ranges and row counts.</p>
+      <div style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:1rem; margin:.75rem 0 .5rem; font-family:monospace; font-size:.85rem; overflow-x:auto">
+        <span style="color:var(--green); font-weight:600">GET</span> <span style="color:var(--text)">/api/data-summary</span>
+      </div>
+      <p style="margin-top:.5rem"><strong style="color:var(--text)">Example response:</strong></p>
+      <pre style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:1rem; margin:.5rem 0 1.5rem; font-size:.82rem; overflow-x:auto; color:var(--muted); line-height:1.6">[
+  {
+    "symbol": "GC=F",
+    "min_date": "2020-01-02",
+    "max_date": "2026-03-26",
+    "total_rows": 1560,
+    "rows_with_real": 1559
+  }
+]</pre>
+
+      <h3>Get Predictions for a Ticker</h3>
+      <p>Returns prediction data, accuracy metrics, and the next-day forecast for a given ticker symbol.</p>
+      <div style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:1rem; margin:.75rem 0 .5rem; font-family:monospace; font-size:.85rem; overflow-x:auto">
+        <span style="color:var(--green); font-weight:600">GET</span> <span style="color:var(--text)">/api/predictions?symbol=<em style="color:var(--accent-light)">{TICKER}</em></span>
+      </div>
+
+      <p style="margin-top:.75rem"><strong style="color:var(--text)">Query parameters:</strong></p>
+      <div class="table-wrap" style="margin:.5rem 0 1rem">
+        <table>
+          <thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code style="color:var(--accent-light)">symbol</code></td><td>string</td><td>Yes</td><td>Ticker symbol, e.g. <code style="color:var(--text)">GC=F</code></td></tr>
+            <tr><td><code style="color:var(--accent-light)">days</code></td><td>integer</td><td>No</td><td>Limit results to the last N days</td></tr>
+            <tr><td><code style="color:var(--accent-light)">start</code></td><td>string</td><td>No</td><td>Start date filter (YYYY-MM-DD)</td></tr>
+            <tr><td><code style="color:var(--accent-light)">end</code></td><td>string</td><td>No</td><td>End date filter (YYYY-MM-DD)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong style="color:var(--text)">Example request:</strong></p>
+      <div style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:1rem; margin:.5rem 0 .5rem; font-family:monospace; font-size:.85rem; overflow-x:auto">
+        <span style="color:var(--green); font-weight:600">GET</span> <span style="color:var(--text)">/api/predictions?symbol=GC=F&amp;days=7</span>
+      </div>
+
+      <p style="margin-top:.75rem"><strong style="color:var(--text)">Example response:</strong></p>
+      <pre style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:1rem; margin:.5rem 0 1.5rem; font-size:.82rem; overflow-x:auto; color:var(--muted); line-height:1.6">{
+  "correct_direction_pct": 57.14,
+  "mae": 12.35,
+  "rows": [
+    {
+      "Date": "2026-03-26",
+      "Symbol": "GC=F",
+      "Real_Close": 3050.20,
+      "Predicted_Close": 3045.80,
+      "Correct_Direction": true,
+      "Close_Correct": true
+    }
+  ],
+  "next_day": {
+    "date": "2026-03-27",
+    "predicted_close": 3052.10
+  }
+}</pre>
+
+      <h3>Usage Examples</h3>
+      <p><strong style="color:var(--text)">cURL:</strong></p>
+      <pre style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:1rem; margin:.5rem 0 1rem; font-size:.82rem; overflow-x:auto; color:var(--muted); line-height:1.6">curl "https://your-domain.com/api/data-summary"
+curl "https://nextdayprice.com/api/predictions?symbol=GC%3DF&amp;days=30"</pre>
+      <p><strong style="color:var(--text)">Python:</strong></p>
+      <pre style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:1rem; margin:.5rem 0 1rem; font-size:.82rem; overflow-x:auto; color:var(--muted); line-height:1.6">import requests
+
+# List all tickers
+tickers = requests.get("https://nextdayprice.com/api/data-summary").json()
+print(tickers)
+
+# Get predictions for a ticker
+data = requests.get("https://nextdayprice.com/api/predictions",
+                     params={"symbol": "GC=F", "days": 30}).json()
+print(f"Direction accuracy: {data['correct_direction_pct']}%")
+print(f"Next day forecast: ${data['next_day']['predicted_close']}")</pre>
+      <p><strong style="color:var(--text)">JavaScript:</strong></p>
+      <pre style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:1rem; margin:.5rem 0 1.5rem; font-size:.82rem; overflow-x:auto; color:var(--muted); line-height:1.6">// List all tickers
+const tickers = await fetch("/api/data-summary").then(r =&gt; r.json());
+console.log(tickers);
+
+// Get predictions
+const data = await fetch("/api/predictions?symbol=GC%3DF&amp;days=30")
+  .then(r =&gt; r.json());
+console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
     </div>
   </div>
 
