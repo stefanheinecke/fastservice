@@ -137,6 +137,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="predictions">Predictions</button>
     <button class="tab-btn" data-tab="load-data">Load Data</button>
+    <button class="tab-btn" data-tab="scenario">Scenario</button>
     <button class="tab-btn" data-tab="api">API</button>
     <button class="tab-btn" data-tab="about">About</button>
     <button class="tab-btn" data-tab="contact">Contact</button>
@@ -352,6 +353,108 @@
         not just how close the predictions are, but whether the model correctly anticipates
         upward or downward movements.
       </p>
+    </div>
+  </div>
+
+  <!-- ==================== Scenario ==================== -->
+  <div id="scenario" class="tab-panel">
+    <div class="card">
+      <h2>Investment Scenario Simulator</h2>
+      <p style="color:var(--muted); margin-bottom:1rem">
+        Simulate how an investment would have performed if you followed the AI predictions strictly.
+        Each day the model decides: if the predicted close is higher than the current close, buy (or hold).
+        If the predicted close is lower, sell (or stay out). The portfolio is either fully invested or fully in cash.
+      </p>
+
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.25rem">
+        <div>
+          <label class="form-label" for="sc-ticker">Ticker</label>
+          <select id="sc-ticker" class="form-select">
+            <option value="">Loading&hellip;</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label" for="sc-amount">Initial Investment ($)</label>
+          <input type="number" id="sc-amount" class="form-text" value="100" min="1" step="1" style="width:120px" />
+        </div>
+        <div>
+          <label class="form-label" for="sc-period">Period</label>
+          <select id="sc-period" class="form-select">
+            <option value="365">1 Year</option>
+            <option value="730">2 Years</option>
+            <option value="1095">3 Years</option>
+            <option value="1825" selected>5 Years</option>
+            <option value="0">All Data</option>
+          </select>
+        </div>
+        <button id="sc-run-btn" class="btn">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z"/></svg>
+          Run Simulation
+        </button>
+      </div>
+    </div>
+
+    <div id="sc-loading" style="display:none; flex-direction:column; align-items:center; justify-content:center; gap:1rem; padding:4rem 0">
+      <div class="spinner"></div>
+      <span style="color:var(--muted)">Running simulation&hellip;</span>
+    </div>
+    <div id="sc-error" class="error-msg"></div>
+
+    <div id="sc-content" style="display:none">
+      <!-- Result banner -->
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem">
+        <div class="metric-card">
+          <div class="label">Initial Investment</div>
+          <div class="value" id="sc-initial"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">AI Strategy Final Value</div>
+          <div class="value" id="sc-final"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">AI Strategy Return</div>
+          <div class="value" id="sc-return"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Buy &amp; Hold Final Value</div>
+          <div class="value" id="sc-bh-final"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Buy &amp; Hold Return</div>
+          <div class="value" id="sc-bh-return"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Total Trades</div>
+          <div class="value" id="sc-trades"></div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="card">
+        <h2>Portfolio Value Over Time</h2>
+        <div style="position:relative;height:400px">
+          <canvas id="sc-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Trade log -->
+      <details class="card" style="cursor:pointer">
+        <summary style="font-weight:600; font-size:.95rem; color:var(--accent-light)">Trade Log</summary>
+        <div class="table-wrap" style="max-height:400px; overflow-y:auto; margin-top:1rem">
+          <table>
+            <thead>
+              <tr><th>Date</th><th>Action</th><th>Price</th><th>Portfolio Value</th></tr>
+            </thead>
+            <tbody id="sc-log-body"></tbody>
+          </table>
+        </div>
+      </details>
+
+      <div class="disclaimer">
+        This simulation is hypothetical and based on historical predictions. It does not account for
+        trading fees, slippage, taxes, or market impact. Past performance does not guarantee future results.
+        This is not financial advice.
+      </div>
     </div>
   </div>
 
@@ -591,6 +694,9 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       predTicker.value = symbols[0];
       loadPredictions(symbols[0]);
     }
+
+    // Scenario dropdown
+    if (typeof populateScenarioTicker === "function") populateScenarioTicker();
   }
 
   const flushTicker = document.getElementById("flush-ticker");
@@ -850,6 +956,200 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       displayData(Number(btn.dataset.days));
     });
   });
+
+  /* ========== Scenario tab ========== */
+  const scTicker  = document.getElementById("sc-ticker");
+  const scAmount  = document.getElementById("sc-amount");
+  const scPeriod  = document.getElementById("sc-period");
+  const scRunBtn  = document.getElementById("sc-run-btn");
+  const scLoading = document.getElementById("sc-loading");
+  const scError   = document.getElementById("sc-error");
+  const scContent = document.getElementById("sc-content");
+  let scenarioChart = null;
+
+  // Populate scenario ticker dropdown after summary loads
+  function populateScenarioTicker() {
+    const symbols = summaryData.map(r => r.symbol).filter(Boolean).sort();
+    const prev = scTicker.value;
+    scTicker.innerHTML = '<option value="">Select ticker&hellip;</option>';
+    symbols.forEach(s => {
+      const o = document.createElement("option");
+      o.value = s; o.textContent = s;
+      scTicker.appendChild(o);
+    });
+    if (prev && symbols.includes(prev)) scTicker.value = prev;
+  }
+
+  scRunBtn.addEventListener("click", async () => {
+    const symbol = scTicker.value;
+    const amount = parseFloat(scAmount.value);
+    const days   = parseInt(scPeriod.value);
+
+    if (!symbol) {
+      scError.style.display = "block";
+      scError.textContent = "Please select a ticker.";
+      return;
+    }
+    if (!amount || amount <= 0) {
+      scError.style.display = "block";
+      scError.textContent = "Please enter a valid investment amount.";
+      return;
+    }
+
+    scError.style.display   = "none";
+    scContent.style.display = "none";
+    scLoading.style.display = "flex";
+
+    try {
+      let url = "/api/predictions?symbol=" + encodeURIComponent(symbol);
+      if (days > 0) url += "&days=" + days;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Server responded " + res.status);
+      const data = await res.json();
+      runSimulation(data.rows, amount);
+      scLoading.style.display = "none";
+      scContent.style.display = "block";
+    } catch (err) {
+      scLoading.style.display = "none";
+      scError.style.display   = "block";
+      scError.textContent     = "Failed to load data: " + err.message;
+    }
+  });
+
+  function runSimulation(rows, initialAmount) {
+    // Sort oldest first
+    const sorted = [...rows].sort((a, b) => a.Date.localeCompare(b.Date));
+
+    // Filter to rows that have real close prices
+    const valid = sorted.filter(r => r.Real_Close != null && !isNaN(r.Real_Close) && r.Predicted_Close != null);
+    if (valid.length < 2) {
+      scError.style.display = "block";
+      scError.textContent = "Not enough data to run simulation.";
+      scContent.style.display = "none";
+      return;
+    }
+
+    let cash = initialAmount;
+    let shares = 0;
+    let invested = false; // whether we currently hold shares
+    let trades = [];
+    let portfolioHistory = []; // {date, value}
+
+    // Buy & hold tracking
+    const firstPrice = valid[0].Real_Close;
+    const bhShares = initialAmount / firstPrice;
+
+    for (let i = 0; i < valid.length; i++) {
+      const row = valid[i];
+      const price = row.Real_Close;
+      const predicted = row.Predicted_Close;
+
+      // Decision: predicted > current price => want to be invested
+      const shouldInvest = predicted > price;
+
+      if (shouldInvest && !invested) {
+        // Buy
+        shares = cash / price;
+        cash = 0;
+        invested = true;
+        trades.push({ date: row.Date, action: "BUY", price: price, value: shares * price });
+      } else if (!shouldInvest && invested) {
+        // Sell
+        cash = shares * price;
+        shares = 0;
+        invested = false;
+        trades.push({ date: row.Date, action: "SELL", price: price, value: cash });
+      }
+
+      // Current portfolio value
+      const currentValue = invested ? shares * price : cash;
+      portfolioHistory.push({ date: row.Date, value: currentValue, bhValue: bhShares * price });
+    }
+
+    // Final values
+    const lastPrice = valid[valid.length - 1].Real_Close;
+    const finalValue = invested ? shares * lastPrice : cash;
+    const bhFinalValue = bhShares * lastPrice;
+    const aiReturn = ((finalValue - initialAmount) / initialAmount * 100);
+    const bhReturn = ((bhFinalValue - initialAmount) / initialAmount * 100);
+
+    // Update metrics
+    document.getElementById("sc-initial").textContent = "$" + initialAmount.toFixed(2);
+    document.getElementById("sc-final").textContent = "$" + finalValue.toFixed(2);
+    document.getElementById("sc-return").textContent = (aiReturn >= 0 ? "+" : "") + aiReturn.toFixed(2) + "%";
+    document.getElementById("sc-return").style.color = aiReturn >= 0 ? "var(--green)" : "var(--red)";
+    document.getElementById("sc-bh-final").textContent = "$" + bhFinalValue.toFixed(2);
+    document.getElementById("sc-bh-return").textContent = (bhReturn >= 0 ? "+" : "") + bhReturn.toFixed(2) + "%";
+    document.getElementById("sc-bh-return").style.color = bhReturn >= 0 ? "var(--green)" : "var(--red)";
+    document.getElementById("sc-trades").textContent = trades.length;
+
+    // Chart
+    const labels  = portfolioHistory.map(p => p.date);
+    const aiData  = portfolioHistory.map(p => p.value);
+    const bhData  = portfolioHistory.map(p => p.bhValue);
+
+    if (scenarioChart) {
+      scenarioChart.data.labels = labels;
+      scenarioChart.data.datasets[0].data = aiData;
+      scenarioChart.data.datasets[1].data = bhData;
+      scenarioChart.update();
+    } else {
+      scenarioChart = new Chart(document.getElementById("sc-chart"), {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "AI Strategy",
+              data: aiData,
+              borderColor: "#22c55e",
+              backgroundColor: "rgba(34,197,94,0.08)",
+              borderWidth: 2, pointRadius: 0, pointHitRadius: 6, tension: 0.3, fill: false,
+            },
+            {
+              label: "Buy & Hold",
+              data: bhData,
+              borderColor: "#9ca3af",
+              backgroundColor: "rgba(156,163,175,0.08)",
+              borderWidth: 2, pointRadius: 0, pointHitRadius: 6, tension: 0.3, fill: false,
+              borderDash: [6, 3],
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { labels: { color: "#e6e6e6", font: { size: 13 } } },
+            tooltip: {
+              backgroundColor: "#1a1d28", titleColor: "#e6e6e6", bodyColor: "#9ca3af",
+              borderColor: "#2a2d3a", borderWidth: 1,
+              callbacks: { label: ctx => ctx.dataset.label + ": $" + (ctx.parsed.y != null ? ctx.parsed.y.toFixed(2) : "\u2014") }
+            }
+          },
+          scales: {
+            x: { ticks: { color: "#9ca3af", maxTicksLimit: 12 }, grid: { color: "rgba(42,45,58,0.5)" } },
+            y: { ticks: { color: "#9ca3af", callback: v => "$" + v }, grid: { color: "rgba(42,45,58,0.5)" } }
+          }
+        }
+      });
+    }
+
+    // Trade log table
+    const logBody = document.getElementById("sc-log-body");
+    logBody.innerHTML = "";
+    trades.forEach(t => {
+      const tr = document.createElement("tr");
+      const actionClass = t.action === "BUY" ? "val-up" : "val-down";
+      tr.innerHTML =
+        "<td>" + t.date + "</td>" +
+        '<td class="' + actionClass + '">' + t.action + "</td>" +
+        "<td>$" + t.price.toFixed(2) + "</td>" +
+        "<td>$" + t.value.toFixed(2) + "</td>";
+      logBody.appendChild(tr);
+    });
+  }
 
   /* ========== Init ========== */
   loadSummary();
