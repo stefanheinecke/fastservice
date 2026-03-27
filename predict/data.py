@@ -127,13 +127,13 @@ class Predictor:
         X_train, X_test = X_scaled[:split_idx], X_scaled[split_idx:]
         y_train, y_test = y[:split_idx], y[split_idx:]
 
-        # Custom loss: MSE + directional BCE (binary cross-entropy on sign)
+        # Custom loss: Huber (robust to outliers) + directional BCE
         def direction_aware_loss(y_true, y_pred):
-            mse = tf.reduce_mean(tf.square(y_true - y_pred))
+            huber = tf.reduce_mean(tf.keras.losses.huber(y_true, y_pred, delta=0.01))
             pred_dir = tf.sigmoid(y_pred * 100.0)
             true_dir = tf.cast(y_true > 0, tf.float32)
             dir_bce = tf.reduce_mean(tf.keras.losses.binary_crossentropy(true_dir, pred_dir))
-            return mse + 3.0 * dir_bce
+            return huber + 3.0 * dir_bce
 
         model = tf.keras.models.Sequential([
             tf.keras.layers.LSTM(64, return_sequences=True,
@@ -346,6 +346,10 @@ class Predictor:
             ((df["Real_Close_diff"] > 0) & (df["Predicted_Close_diff"] > 0)) |
             ((df["Real_Close_diff"] < 0) & (df["Predicted_Close_diff"] < 0))
         )
+
+        # Close & Correct: direction right AND within 5% of real price
+        pct_error = (abs(df["Predicted_Close"] - df["Real_Close"]) / df["Real_Close"])
+        df["Close_Correct"] = df["Correct_Direction"] & (pct_error <= 0.05)
 
         correct_direction = df["Correct_Direction"].sum()
         correct_direction_perc = correct_direction / len(df) * 100 if len(df) > 0 else 0

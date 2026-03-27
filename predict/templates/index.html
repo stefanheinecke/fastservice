@@ -257,6 +257,10 @@
           <div class="value" id="dir-pct"></div>
         </div>
         <div class="metric-card">
+          <div class="label">Close &amp; Correct</div>
+          <div class="value" id="close-correct-pct"></div>
+        </div>
+        <div class="metric-card">
           <div class="label">MAE</div>
           <div class="value" id="mae"></div>
         </div>
@@ -274,6 +278,7 @@
         <summary style="font-weight:600; font-size:.95rem; color:var(--accent-light)">What do these metrics mean?</summary>
         <div style="margin-top:1rem; color:var(--muted); font-size:.88rem; line-height:1.7">
           <p><strong style="color:var(--text)">Correct Direction</strong> &mdash; The percentage of days where the model correctly predicted whether the price would go up or down. Higher is better.</p>
+          <p style="margin-top:.6rem"><strong style="color:var(--text)">Close &amp; Correct</strong> &mdash; The percentage of days where the model got the direction right AND the predicted price was within 5% of the actual price. This is a stricter metric that rewards both accuracy and proximity. Higher is better.</p>
           <p style="margin-top:.6rem"><strong style="color:var(--text)">MAE (Mean Absolute Error)</strong> &mdash; The average absolute difference between predicted and actual prices. A MAE of $5 means the prediction is off by $5 on average. Lower is better.</p>
           <p style="margin-top:.6rem"><strong style="color:var(--text)">RMSE (Root Mean Squared Error)</strong> &mdash; Like MAE but penalises large errors more heavily. Expressed in dollars, it gives a sense of typical error magnitude. Lower is better.</p>
           <p style="margin-top:.6rem"><strong style="color:var(--text)">MAPE (Mean Absolute Percentage Error)</strong> &mdash; The average prediction error expressed as a percentage of the actual price. A MAPE of 2% means the model is typically off by 2% of the real price. Lower is better.</p>
@@ -293,7 +298,7 @@
           <table>
             <thead>
               <tr>
-                <th>Date</th><th>Symbol</th><th>Real Close</th><th>Predicted Close</th><th>Direction</th>
+                <th>Date</th><th>Symbol</th><th>Real Close</th><th>Predicted Close</th><th>Direction</th><th>Close &amp; Correct</th>
               </tr>
             </thead>
             <tbody id="pred-body"></tbody>
@@ -616,7 +621,7 @@
     }
 
     // Recalculate metrics for the visible window
-    let correctCount = 0, totalDir = 0;
+    let correctCount = 0, closeCorrectCount = 0, totalDir = 0;
     let absErrorSum = 0, sqErrorSum = 0, pctErrorSum = 0, errCount = 0;
     rows.forEach(r => {
       const dir = r.Correct_Direction;
@@ -624,6 +629,8 @@
         totalDir++;
         if (dir === true || dir === 1) correctCount++;
       }
+      const cc = r.Close_Correct;
+      if (cc === true || cc === 1) closeCorrectCount++;
       if (r.Real_Close != null && !isNaN(r.Real_Close) && r.Predicted_Close != null) {
         const diff = r.Real_Close - r.Predicted_Close;
         absErrorSum += Math.abs(diff);
@@ -633,11 +640,13 @@
       }
     });
     const dirPct = totalDir > 0 ? (correctCount / totalDir * 100).toFixed(2) : "\u2014";
+    const ccPct  = totalDir > 0 ? (closeCorrectCount / totalDir * 100).toFixed(2) : "\u2014";
     const mae    = errCount > 0 ? (absErrorSum / errCount).toFixed(2) : "\u2014";
     const rmse   = errCount > 0 ? Math.sqrt(sqErrorSum / errCount).toFixed(2) : "\u2014";
     const mape   = errCount > 0 ? (pctErrorSum / errCount * 100).toFixed(2) : "\u2014";
 
     document.getElementById("dir-pct").textContent = dirPct + (dirPct !== "\u2014" ? "%" : "");
+    document.getElementById("close-correct-pct").textContent = ccPct + (ccPct !== "\u2014" ? "%" : "");
     document.getElementById("mae").textContent     = mae  !== "\u2014" ? "$" + mae  : "\u2014";
     document.getElementById("rmse").textContent    = rmse !== "\u2014" ? "$" + rmse : "\u2014";
     document.getElementById("mape").textContent    = mape !== "\u2014" ? mape + "%" : "\u2014";
@@ -703,14 +712,18 @@
       const realVal  = (r.Real_Close != null && !isNaN(r.Real_Close)) ? Number(r.Real_Close).toFixed(2) : "\u2014";
       const predVal  = Number(r.Predicted_Close).toFixed(2);
       const dirOk    = r.Correct_Direction;
+      const ccOk     = r.Close_Correct;
       const dirLabel = dirOk === true || dirOk === 1 ? "Correct" : (dirOk === false || dirOk === 0 ? "Wrong" : "\u2014");
       const dirClass = dirOk === true || dirOk === 1 ? "val-up" : (dirOk === false || dirOk === 0 ? "val-down" : "");
+      const ccLabel  = ccOk === true || ccOk === 1 ? "\u2713" : (ccOk === false || ccOk === 0 ? "\u2717" : "\u2014");
+      const ccClass  = ccOk === true || ccOk === 1 ? "val-up" : (ccOk === false || ccOk === 0 ? "val-down" : "");
       tr.innerHTML =
         "<td>" + r.Date + "</td>" +
         "<td>" + (r.Symbol || "") + "</td>" +
         "<td>" + realVal + "</td>" +
         "<td>" + predVal + "</td>" +
-        '<td class="' + dirClass + '">' + dirLabel + "</td>";
+        '<td class="' + dirClass + '">' + dirLabel + "</td>" +
+        '<td class="' + ccClass + '">' + ccLabel + "</td>";
       tbody.appendChild(tr);
     });
   }
