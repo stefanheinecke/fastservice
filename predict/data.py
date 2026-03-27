@@ -62,6 +62,8 @@ class Predictor:
 
         # --- Return-based features ---
         df["return_1d"] = df["Close"].pct_change()
+        df["return_2d"] = df["Close"].pct_change(2)
+        df["return_3d"] = df["Close"].pct_change(3)
         df["return_5d"] = df["Close"].pct_change(5)
         df["return_10d"] = df["Close"].pct_change(10)
         df["return_20d"] = df["Close"].pct_change(20)
@@ -74,6 +76,8 @@ class Predictor:
         df["ma_cross"] = df["ma5"] / df["ma20"] - 1  # >0 = bullish, <0 = bearish
         df["high_low_range"] = (df["High"] - df["Low"]) / df["Close"]
         df["close_position"] = (df["Close"] - df["Low"]) / (df["High"] - df["Low"] + 1e-8)
+        # Short-term momentum shift (acceleration)
+        df["momentum_shift"] = df["return_1d"] - df["return_1d"].shift(1)
         df.dropna(inplace=True)
 
         feature_cols = [
@@ -81,9 +85,11 @@ class Predictor:
             "momentum_rsi", "trend_macd", "momentum_stoch",
             "volatility_bbm", "volatility_bbh", "volatility_bbl",
             "volatility_atr", "trend_ema_fast", "volume_obv",
-            "return_1d", "return_5d", "return_10d", "return_20d",
+            "return_1d", "return_2d", "return_3d",
+            "return_5d", "return_10d", "return_20d",
             "rolling_vol_10", "rolling_vol_20", "close_to_ema",
             "ma_cross", "high_low_range", "close_position",
+            "momentum_shift",
         ]
         close_prices = df["Close"].values.copy()
         df = df[feature_cols]
@@ -117,22 +123,35 @@ class Predictor:
         # Custom loss: MSE + directional BCE (binary cross-entropy on sign)
         def direction_aware_loss(y_true, y_pred):
             mse = tf.reduce_mean(tf.square(y_true - y_pred))
-            # Convert to direction probabilities: sigmoid(scaled prediction)
-            # Large scale makes sigmoid sharper → stronger directional gradient
-            pred_dir = tf.sigmoid(y_pred * 100.0)  # >0 → ~1, <0 → ~0
+            pred_dir = tf.sigmoid(y_pred * 100.0)
             true_dir = tf.cast(y_true > 0, tf.float32)
             dir_bce = tf.reduce_mean(tf.keras.losses.binary_crossentropy(true_dir, pred_dir))
-            return mse + 3.0 * dir_bce
+            return mse + 4.0 * dir_bce
 
-        model = tf.keras.models.Sequential([
-            tf.keras.layers.LSTM(64, return_sequences=True,
-                                 input_shape=(window_size, num_features)),
-            tf.keras.layers.Dropout(0.3),
-            tf.keras.layers.LSTM(32, return_sequences=False),
-            tf.keras.layers.Dropout(0.3),
-            tf.keras.layers.Dense(32, activation="relu"),
-            tf.keras.layers.Dense(1)
-        ])
+        # Attention layer to focus on most recent/important time steps
+        class Attention(tf.keras.layers.Layer):
+            def build(self, input_shape):
+                self.W = self.add_weight(shape=(input_shape[-1], 1),
+                                         initializer="glorot_uniform", trainable=True)
+                self.b = self.add_weight(shape=(input_shape[1], 1),
+                                         initializer="zeros", trainable=True)
+
+            def call(self, x):
+                scores = tf.nn.tanh(tf.matmul(x, self.W) + self.b)
+                weights = tf.nn.softmax(scores, axis=1)
+                return tf.reduce_sum(x * weights, axis=1)
+
+        inp = tf.keras.layers.Input(shape=(window_size, num_features))
+        x = tf.keras.layers.LSTM(64, return_sequences=True)(inp)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
+        x = tf.keras.layers.LSTM(32, return_sequences=True)(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dropout(0.3)(x)
+        x = Attention()(x)
+        x = tf.keras.layers.Dense(32, activation="relu")(x)
+        out = tf.keras.layers.Dense(1)(x)
+        model = tf.keras.models.Model(inputs=inp, outputs=out)
 
         model.compile(
             optimizer=tf.keras.optimizers.Adam(learning_rate=5e-4),
@@ -192,8 +211,8 @@ class Predictor:
 
         # Forecast future (1 day)
         latest_window = df.iloc[-window_size:].values.copy()
-        inp = X_scaler.transform(latest_window.reshape(-1, num_features)).reshape(1, window_size, num_features)
-        p = model.predict(inp, verbose=0)
+        latest_scaled = X_scaler.transform(latest_window.reshape(-1, num_features)).reshape(1, window_size, num_features)
+        p = model.predict(latest_scaled, verbose=0)
         future_price = close_prices[-1] * np.exp(p[0][0])
 
         # Build DataFrames — use actual trading dates, NOT generated business days
