@@ -63,10 +63,12 @@ def api_predictions():
     df["Date"] = df["Date"].astype(str)
     # Replace NaN/None so JSON serialization doesn't produce invalid tokens
     rows = json.loads(df.to_json(orient="records"))
+    forecast = predictor.fetch_next_day_forecast()
     return _json_response({
         "correct_direction_pct": round(correct_direction_perc, 2),
         "mae": round(mae, 2),
         "rows": rows,
+        "next_day": forecast,
     })
 
 

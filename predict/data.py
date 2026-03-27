@@ -357,3 +357,20 @@ class Predictor:
         mae = float(np.mean(np.abs(df["Real_Close"] - df["Predicted_Close"]))) if len(df) > 0 else 0
 
         return df, correct_direction_perc, mae
+
+    def fetch_next_day_forecast(self):
+        """Return the most recent prediction that has no real_close yet (i.e. future)."""
+        query = text(f"""
+            SELECT date AS "Date", symbol AS "Symbol",
+                   predicted_close AS "Predicted_Close"
+            FROM {self.TABLE_NAME}
+            WHERE symbol = :symbol AND real_close IS NULL
+            ORDER BY date DESC
+            LIMIT 1
+        """)
+        with self.engine.connect() as conn:
+            df = pd.read_sql(query, conn, params={"symbol": self.symbol})
+        if df.empty:
+            return None
+        row = df.iloc[0]
+        return {"date": str(row["Date"]), "predicted_close": float(row["Predicted_Close"])}

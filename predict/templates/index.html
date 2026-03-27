@@ -251,6 +251,15 @@
     <div id="pred-error" class="error-msg"></div>
     <div id="pred-content" style="display:none">
 
+      <!-- Next-day forecast banner -->
+      <div id="forecast-banner" style="display:none; background:linear-gradient(135deg,#1a1a2e,#16213e); border:1px solid var(--accent); border-radius:10px; padding:1.2rem 1.5rem; margin-bottom:1.5rem; text-align:center">
+        <div style="font-size:.85rem; color:var(--muted); margin-bottom:.3rem">Next Trading Day Prediction</div>
+        <div style="display:flex; justify-content:center; align-items:baseline; gap:.6rem">
+          <span id="forecast-date" style="font-size:.9rem; color:var(--accent-light)"></span>
+          <span id="forecast-price" style="font-size:1.6rem; font-weight:700; color:var(--text)"></span>
+        </div>
+      </div>
+
       <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem">
         <div class="metric-card">
           <div class="label">Correct Direction</div>
@@ -594,6 +603,16 @@
       if (!res.ok) throw new Error("Server responded " + res.status);
       const data = await res.json();
       allRows = data.rows;
+
+      // Show next-day forecast if available
+      const banner = document.getElementById("forecast-banner");
+      if (data.next_day) {
+        document.getElementById("forecast-date").textContent = data.next_day.date;
+        document.getElementById("forecast-price").textContent = "$" + Number(data.next_day.predicted_close).toFixed(2);
+        banner.style.display = "block";
+      } else {
+        banner.style.display = "none";
+      }
 
       predLoading.style.display = "none";
       predContent.style.display = "block";
