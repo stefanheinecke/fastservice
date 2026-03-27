@@ -365,8 +365,10 @@
         Simulate how an investment would have performed if you followed the AI predictions strictly.
         After market close each day, the model predicts tomorrow's close. If it expects a rise,
         a market-on-open buy order is placed for the next morning. If it expects a drop, a sell order is placed.
-        Trades execute at the next day's <strong style="color:var(--text)">open price</strong>, which is the earliest
-        you can realistically act on the signal. The portfolio is either fully invested or fully in cash.
+        Trades execute at the next day's <strong style="color:var(--text)">open price</strong>.
+        On buy days the return is open-to-close; on days you already hold, the full close-to-close
+        return (including the overnight gap) is captured; on sell days you capture the overnight
+        return up to the open. The portfolio is either fully invested or fully in cash.
       </p>
 
       <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.25rem">
@@ -1055,7 +1057,12 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
     // End of day i-1: know Real_Close[i-1], model produces Predicted_Close[i].
     // Signal: Predicted_Close[i] > Real_Close[i-1] → expect rise → buy at open[i].
     //         Predicted_Close[i] < Real_Close[i-1] → expect drop → sell at open[i].
-    // Return captured = (close[i] - open[i]) / open[i] (open-to-close on day i).
+    //
+    // 4 cases for daily return:
+    //   BUY day  (was cash, now invested): bought at open → return = (close - open) / open
+    //   HOLD day (already invested):       held overnight  → return = (close[i] - close[i-1]) / close[i-1]
+    //   SELL day (was invested, now cash):  sold at open    → return = (open[i] - close[i-1]) / close[i-1]
+    //   CASH day (not invested):            no return
     for (let i = 1; i < valid.length; i++) {
       const prevClose = valid[i - 1].Real_Close;
       const todayPredicted = valid[i].Predicted_Close;
@@ -1063,21 +1070,28 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       const todayClose = valid[i].Real_Close;
 
       const shouldInvest = todayPredicted > prevClose;
+      const wasInvested = invested;
 
       if (shouldInvest && !invested) {
         invested = true;
         trades.push({ date: valid[i].Date, action: "BUY", price: todayOpen, value: portfolioValue });
       } else if (!shouldInvest && invested) {
-        // Sell at today's open
         invested = false;
         trades.push({ date: valid[i].Date, action: "SELL", price: todayOpen, value: portfolioValue });
       }
 
-      // If invested, capture open-to-close return
-      if (invested) {
-        const otcReturn = (todayClose - todayOpen) / todayOpen;
-        portfolioValue *= (1 + otcReturn);
+      // Apply the appropriate return
+      if (!wasInvested && invested) {
+        // BUY day: entered at open, capture open-to-close
+        portfolioValue *= (1 + (todayClose - todayOpen) / todayOpen);
+      } else if (wasInvested && invested) {
+        // HOLD day: held overnight, capture close-to-close
+        portfolioValue *= (1 + (todayClose - prevClose) / prevClose);
+      } else if (wasInvested && !invested) {
+        // SELL day: sold at open, capture close-to-open (overnight return only)
+        portfolioValue *= (1 + (todayOpen - prevClose) / prevClose);
       }
+      // CASH day: no change
 
       const bhValue = initialAmount * (todayClose / firstOpen);
       portfolioHistory.push({ date: valid[i].Date, value: portfolioValue, bhValue: bhValue });
@@ -1186,7 +1200,7 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
     // Header row (row 1)
     ws_data.push([
       "Date", "Prev Close", "Predicted Close", "Signal (Pred > Prev Close)",
-      "Open", "Close", "Open-to-Close Return", "Invested?",
+      "Open", "Close", "Daily Return", "Was Invested?", "Invested Now?",
       "Action", "AI Portfolio Value", "Buy & Hold Value"
     ]);
 
@@ -1199,28 +1213,37 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       valid[0].Real_Open,       // E2
       valid[0].Real_Close,      // F2
       null,           // G2
-      "No",           // H2
-      null,           // I2
-      initialAmount,  // J2
+      "No",           // H2 - was invested
+      "No",           // I2 - invested now
+      null,           // J2
       initialAmount,  // K2
+      initialAmount,  // L2
     ]);
 
     // Rows 3+: Day 1 onward with formulas
-    let invested = false;
+    let xlInvested = false;
     for (let i = 1; i < valid.length; i++) {
       const r = i + 2; // Excel row number (1-indexed, header=1, day0=2)
       const prevClose = valid[i - 1].Real_Close;
       const predicted = valid[i].Predicted_Close;
       const shouldInvest = predicted > prevClose;
+      const wasInvested = xlInvested;
 
       let action = null;
-      if (shouldInvest && !invested) {
-        invested = true;
+      if (shouldInvest && !xlInvested) {
+        xlInvested = true;
         action = "BUY";
-      } else if (!shouldInvest && invested) {
-        invested = false;
+      } else if (!shouldInvest && xlInvested) {
+        xlInvested = false;
         action = "SELL";
       }
+
+      // G: Daily Return formula
+      // BUY day (was No, now Yes):  (Close - Open) / Open
+      // HOLD day (was Yes, now Yes): (Close - PrevClose) / PrevClose
+      // SELL day (was Yes, now No):  (Open - PrevClose) / PrevClose
+      // CASH day (was No, now No):   0
+      const returnFormula = `IF(AND(H${r}="No",I${r}="Yes"),(F${r}-E${r})/E${r},IF(AND(H${r}="Yes",I${r}="Yes"),(F${r}-B${r})/B${r},IF(AND(H${r}="Yes",I${r}="No"),(E${r}-B${r})/B${r},0)))`;
 
       ws_data.push([
         valid[i].Date,              // A
@@ -1229,13 +1252,14 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
         { f: `C${r}>B${r}` },      // D: Signal formula
         valid[i].Real_Open,         // E
         valid[i].Real_Close,        // F
-        { f: `(F${r}-E${r})/E${r}` }, // G: Open-to-Close Return formula
-        invested ? "Yes" : "No",    // H
-        action,                     // I
-        // J: AI Portfolio = prev value * (1 + return) if invested, else prev value
-        { f: `IF(H${r}="Yes",J${r-1}*(1+G${r}),J${r-1})` },
-        // K: Buy & Hold = initial * (Close / firstOpen)
-        { f: `J2*(F${r}/E3)` },     // E3 = first open where B&H starts
+        { f: returnFormula },       // G: Daily Return formula
+        wasInvested ? "Yes" : "No", // H: Was Invested?
+        xlInvested ? "Yes" : "No",  // I: Invested Now?
+        action,                     // J: Action
+        // K: AI Portfolio = prev value * (1 + daily return)
+        { f: `K${r-1}*(1+G${r})` },
+        // L: Buy & Hold = initial * (Close / firstOpen)
+        { f: `K2*(F${r}/E3)` },     // E3 = first open where B&H starts
       ]);
     }
 
@@ -1250,8 +1274,9 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       { wch: 22 }, // Signal
       { wch: 12 }, // Open
       { wch: 12 }, // Close
-      { wch: 20 }, // OTC Return
-      { wch: 10 }, // Invested
+      { wch: 18 }, // Daily Return
+      { wch: 14 }, // Was Invested
+      { wch: 14 }, // Invested Now
       { wch: 8 },  // Action
       { wch: 18 }, // AI Portfolio
       { wch: 18 }, // B&H
@@ -1262,7 +1287,7 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
     const pctFmt = "0.00%";
     const range = XLSX.utils.decode_range(ws["!ref"]);
     for (let R = 1; R <= range.e.r; R++) {
-      [1, 2, 4, 5, 9, 10].forEach(C => {
+      [1, 2, 4, 5, 10, 11].forEach(C => {
         const addr = XLSX.utils.encode_cell({ r: R, c: C });
         if (ws[addr]) ws[addr].z = numFmt;
       });
@@ -1281,19 +1306,26 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       ["Period", valid[0].Date + " to " + valid[valid.length - 1].Date],
       ["Total Trading Days", valid.length - 1],
       [],
-      ["AI Strategy Final Value", { f: `Simulation!J${lastRow}` }],
-      ["AI Strategy Return", { f: `(Simulation!J${lastRow}-Simulation!J2)/Simulation!J2` }],
+      ["AI Strategy Final Value", { f: `Simulation!K${lastRow}` }],
+      ["AI Strategy Return", { f: `(Simulation!K${lastRow}-Simulation!K2)/Simulation!K2` }],
       [],
-      ["Buy & Hold Final Value", { f: `Simulation!K${lastRow}` }],
-      ["Buy & Hold Return", { f: `(Simulation!K${lastRow}-Simulation!K2)/Simulation!K2` }],
+      ["Buy & Hold Final Value", { f: `Simulation!L${lastRow}` }],
+      ["Buy & Hold Return", { f: `(Simulation!L${lastRow}-Simulation!L2)/Simulation!L2` }],
       [],
       ["How it works:"],
       ["1. At end of each day, the AI predicts tomorrow's close price."],
-      ["2. If Predicted Close > Today's Close → BUY signal (expect rise)."],
-      ["3. If Predicted Close < Today's Close → SELL signal (expect drop)."],
+      ["2. If Predicted Close > Today's Close -> BUY signal (expect rise)."],
+      ["3. If Predicted Close < Today's Close -> SELL signal (expect drop)."],
       ["4. Trades execute at next day's Open price."],
-      ["5. Return captured = (Close - Open) / Open for that day."],
-      ["6. Portfolio value compounds daily when invested."],
+      [],
+      ["Daily return depends on the transition:"],
+      ["  BUY day  (cash -> invested):  (Close - Open) / Open"],
+      ["  HOLD day (still invested):     (Close - Prev Close) / Prev Close"],
+      ["  SELL day (invested -> cash):   (Open - Prev Close) / Prev Close"],
+      ["  CASH day (still in cash):      0"],
+      [],
+      ["Column H = Was Invested (at start of day, before any action)"],
+      ["Column I = Invested Now (after action, determines exposure)"],
     ];
     const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
     ws2["!cols"] = [{ wch: 36 }, { wch: 20 }];
