@@ -69,13 +69,11 @@ class Predictor:
         df["rolling_vol_20"] = df["return_1d"].rolling(20).std()
         df["close_to_ema"] = df["Close"] / df["trend_ema_fast"] - 1
         # Directional / momentum features
-        df["roc_5"] = df["Close"].pct_change(5)  # rate of change
-        df["roc_10"] = df["Close"].pct_change(10)
         df["ma5"] = df["Close"].rolling(5).mean()
         df["ma20"] = df["Close"].rolling(20).mean()
         df["ma_cross"] = df["ma5"] / df["ma20"] - 1  # >0 = bullish, <0 = bearish
         df["high_low_range"] = (df["High"] - df["Low"]) / df["Close"]
-        df["close_position"] = (df["Close"] - df["Low"]) / (df["High"] - df["Low"] + 1e-8)  # where close sits in day's range
+        df["close_position"] = (df["Close"] - df["Low"]) / (df["High"] - df["Low"] + 1e-8)
         df.dropna(inplace=True)
 
         feature_cols = [
@@ -85,16 +83,16 @@ class Predictor:
             "volatility_atr", "trend_ema_fast", "volume_obv",
             "return_1d", "return_5d", "return_10d", "return_20d",
             "rolling_vol_10", "rolling_vol_20", "close_to_ema",
-            "roc_5", "roc_10", "ma_cross", "high_low_range", "close_position",
+            "ma_cross", "high_low_range", "close_position",
         ]
         close_prices = df["Close"].values.copy()
         df = df[feature_cols]
         num_features = len(feature_cols)
 
-        # Target: raw log returns (no scaler — preserves sign for direction)
+        # Target: raw log returns (preserves sign for direction)
         log_returns = np.log(close_prices[1:] / close_prices[:-1])
 
-        window_size = 30
+        window_size = 60
         features, labels = [], []
         for i in range(window_size, len(df)):
             window = df.iloc[i - window_size:i].values
@@ -102,9 +100,9 @@ class Predictor:
             labels.append(log_returns[i - 1])
 
         X = np.array(features)
-        y = np.array(labels).reshape(-1, 1)  # raw log returns, no scaling
+        y = np.array(labels).reshape(-1, 1)
 
-        # StandardScaler on features (handles outliers much better than MinMaxScaler)
+        # StandardScaler on features
         n_samples = X.shape[0]
         X_flat = X.reshape(-1, num_features)
         X_scaler = StandardScaler()
@@ -116,14 +114,16 @@ class Predictor:
         X_train, X_test = X_scaled[:split_idx], X_scaled[split_idx:]
         y_train, y_test = y[:split_idx], y[split_idx:]
 
-        # Custom loss: MSE + directional penalty
+        # Custom loss: MSE + directional BCE (binary cross-entropy on sign)
         def direction_aware_loss(y_true, y_pred):
             mse = tf.reduce_mean(tf.square(y_true - y_pred))
-            # Penalise when predicted sign differs from true sign
-            sign_penalty = tf.reduce_mean(tf.nn.relu(-y_true * y_pred))
-            return mse + 5.0 * sign_penalty
+            # Convert to direction probabilities: sigmoid(scaled prediction)
+            # Large scale makes sigmoid sharper → stronger directional gradient
+            pred_dir = tf.sigmoid(y_pred * 100.0)  # >0 → ~1, <0 → ~0
+            true_dir = tf.cast(y_true > 0, tf.float32)
+            dir_bce = tf.reduce_mean(tf.keras.losses.binary_crossentropy(true_dir, pred_dir))
+            return mse + 3.0 * dir_bce
 
-        # Lighter model to reduce overfitting on ~1000 samples
         model = tf.keras.models.Sequential([
             tf.keras.layers.LSTM(64, return_sequences=True,
                                  input_shape=(window_size, num_features)),
