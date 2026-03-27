@@ -1,4 +1,5 @@
 import uuid
+import gc
 import yfinance as yf
 import ta
 import pandas as pd
@@ -23,6 +24,15 @@ random.seed(SEED)
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
 os.environ['PYTHONHASHSEED'] = str(SEED)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+# Limit TensorFlow memory growth
+try:
+    gpus = tf.config.list_physical_devices('GPU')
+    for gpu in gpus:
+        tf.config.experimental.set_memory_growth(gpu, True)
+except Exception:
+    pass
 
 # Load data
 def load_data(symbol: str):
@@ -100,14 +110,17 @@ class Predictor:
             labels.append(log_returns[i - 1])
 
         X = np.array(features)
+        del features  # free list memory
         y = np.array(labels).reshape(-1, 1)
+        del labels
 
-        # StandardScaler on features
+        # StandardScaler on features (in-place reshape to avoid extra copies)
         n_samples = X.shape[0]
-        X_flat = X.reshape(-1, num_features)
         X_scaler = StandardScaler()
-        X_flat_scaled = X_scaler.fit_transform(X_flat)
-        X_scaled = X_flat_scaled.reshape(n_samples, window_size, num_features)
+        X_flat = X.reshape(-1, num_features)
+        X_scaler.fit(X_flat)
+        X_scaled = X_scaler.transform(X_flat).reshape(n_samples, window_size, num_features)
+        del X_flat, X  # free unscaled data
 
         # Chronological split
         split_idx = int(len(X_scaled) * 0.8)
@@ -175,15 +188,16 @@ class Predictor:
         print(f" - MAPE: {mape:.2f}%")
         print(f" - Directional Accuracy: {direction_acc:.2%}")
 
-        # --- Rolling predictions → convert back to prices ---
+        # --- Rolling predictions → convert back to prices (batched) ---
         num_predictions = len(df) - window_size
-        pred_returns = []
-        for i in range(-num_predictions, 0):
-            w = df.iloc[i - window_size:i].values
-            ws = X_scaler.transform(w.reshape(-1, num_features)).reshape(1, window_size, num_features)
-            p = model.predict(ws, verbose=0)
-            pred_returns.append(p[0][0])
-        pred_returns = np.array(pred_returns)
+        all_windows = np.array([df.iloc[i - window_size:i].values
+                                for i in range(window_size, len(df))])
+        all_scaled = X_scaler.transform(
+            all_windows.reshape(-1, num_features)
+        ).reshape(num_predictions, window_size, num_features)
+        del all_windows
+        pred_returns = model.predict(all_scaled, batch_size=128, verbose=0).flatten()
+        del all_scaled
 
         base_prices = close_prices[window_size - 1:-1]
         preds = base_prices * np.exp(pred_returns)
@@ -193,6 +207,11 @@ class Predictor:
         latest_scaled = X_scaler.transform(latest_window.reshape(-1, num_features)).reshape(1, window_size, num_features)
         p = model.predict(latest_scaled, verbose=0)
         future_price = close_prices[-1] * np.exp(p[0][0])
+
+        # Free TF/model memory
+        del model, X_scaler, latest_scaled, latest_window
+        tf.keras.backend.clear_session()
+        gc.collect()
 
         # Build DataFrames — use actual trading dates, NOT generated business days
         actual_dates = [str(d) for d in list(df.index)[window_size:]]
