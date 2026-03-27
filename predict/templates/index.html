@@ -434,6 +434,29 @@
         </div>
       </div>
 
+      <!-- Broker comparison -->
+      <div class="card">
+        <h2>After Transaction Costs</h2>
+        <p style="color:var(--muted); margin-bottom:1rem; font-size:.88rem">Same AI strategy with flat per-trade fees deducted on each BUY and SELL. Fee is subtracted from portfolio value at point of trade.</p>
+        <div style="display:flex; gap:1rem; flex-wrap:wrap">
+          <div class="metric-card">
+            <div class="label">Swissquote ($9/trade)</div>
+            <div class="value" id="sc-sq-final"></div>
+            <div style="font-size:.8rem; margin-top:.2rem" id="sc-sq-return"></div>
+          </div>
+          <div class="metric-card">
+            <div class="label">Interactive Brokers ($1/trade)</div>
+            <div class="value" id="sc-ib-final"></div>
+            <div style="font-size:.8rem; margin-top:.2rem" id="sc-ib-return"></div>
+          </div>
+          <div class="metric-card">
+            <div class="label">Saxo Bank ($3/trade)</div>
+            <div class="value" id="sc-saxo-final"></div>
+            <div style="font-size:.8rem; margin-top:.2rem" id="sc-saxo-return"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Chart -->
       <div class="card">
         <h2>Portfolio Value Over Time</h2>
@@ -1047,11 +1070,21 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
     let trades = [];
     let portfolioHistory = []; // {date, value}
 
+    // Broker portfolios (same signals, fees deducted on trades)
+    const brokers = [
+      { name: "Swissquote",  fee: 9, value: initialAmount, invested: false },
+      { name: "IBKR",        fee: 1, value: initialAmount, invested: false },
+      { name: "Saxo",        fee: 3, value: initialAmount, invested: false },
+    ];
+
     // Buy & hold tracking: buy at day 1 open, track daily
     const firstOpen = valid[1].Real_Open; // we start trading on day 1
 
     // Day 0: record starting point
-    portfolioHistory.push({ date: valid[0].Date, value: initialAmount, bhValue: initialAmount });
+    portfolioHistory.push({
+      date: valid[0].Date, value: initialAmount, bhValue: initialAmount,
+      sq: initialAmount, ib: initialAmount, saxo: initialAmount,
+    });
 
     // Realistic flow:
     // End of day i-1: know Real_Close[i-1], model produces Predicted_Close[i].
@@ -1093,8 +1126,34 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       }
       // CASH day: no change
 
+      // Apply same logic to broker portfolios with trade fees
+      brokers.forEach(b => {
+        const bWas = b.invested;
+        if (shouldInvest && !b.invested) {
+          b.value -= b.fee; // deduct fee on BUY
+          if (b.value < 0) b.value = 0;
+          b.invested = true;
+        } else if (!shouldInvest && b.invested) {
+          // first capture overnight return before selling
+          b.value *= (1 + (todayOpen - prevClose) / prevClose);
+          b.value -= b.fee; // deduct fee on SELL
+          if (b.value < 0) b.value = 0;
+          b.invested = false;
+        }
+        // Apply day return (same 4 cases but fee already deducted)
+        if (!bWas && b.invested) {
+          b.value *= (1 + (todayClose - todayOpen) / todayOpen);
+        } else if (bWas && b.invested) {
+          b.value *= (1 + (todayClose - prevClose) / prevClose);
+        }
+        // SELL and CASH: no further return
+      });
+
       const bhValue = initialAmount * (todayClose / firstOpen);
-      portfolioHistory.push({ date: valid[i].Date, value: portfolioValue, bhValue: bhValue });
+      portfolioHistory.push({
+        date: valid[i].Date, value: portfolioValue, bhValue: bhValue,
+        sq: brokers[0].value, ib: brokers[1].value, saxo: brokers[2].value,
+      });
     }
 
     // Final values
@@ -1114,15 +1173,33 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
     document.getElementById("sc-bh-return").style.color = bhReturn >= 0 ? "var(--green)" : "var(--red)";
     document.getElementById("sc-trades").textContent = trades.length;
 
+    // Broker metrics
+    function setBrokerMetrics(prefix, bValue) {
+      const bRet = ((bValue - initialAmount) / initialAmount * 100);
+      document.getElementById(prefix + "-final").textContent = "$" + bValue.toFixed(2);
+      const retEl = document.getElementById(prefix + "-return");
+      retEl.textContent = (bRet >= 0 ? "+" : "") + bRet.toFixed(2) + "%";
+      retEl.style.color = bRet >= 0 ? "var(--green)" : "var(--red)";
+    }
+    setBrokerMetrics("sc-sq", brokers[0].value);
+    setBrokerMetrics("sc-ib", brokers[1].value);
+    setBrokerMetrics("sc-saxo", brokers[2].value);
+
     // Chart
     const labels  = portfolioHistory.map(p => p.date);
     const aiData  = portfolioHistory.map(p => p.value);
     const bhData  = portfolioHistory.map(p => p.bhValue);
+    const sqData  = portfolioHistory.map(p => p.sq);
+    const ibData  = portfolioHistory.map(p => p.ib);
+    const saxoData = portfolioHistory.map(p => p.saxo);
 
     if (scenarioChart) {
       scenarioChart.data.labels = labels;
       scenarioChart.data.datasets[0].data = aiData;
       scenarioChart.data.datasets[1].data = bhData;
+      scenarioChart.data.datasets[2].data = sqData;
+      scenarioChart.data.datasets[3].data = ibData;
+      scenarioChart.data.datasets[4].data = saxoData;
       scenarioChart.update();
     } else {
       scenarioChart = new Chart(document.getElementById("sc-chart"), {
@@ -1131,7 +1208,7 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
           labels,
           datasets: [
             {
-              label: "AI Strategy",
+              label: "AI Strategy (no fees)",
               data: aiData,
               borderColor: "#22c55e",
               backgroundColor: "rgba(34,197,94,0.08)",
@@ -1144,6 +1221,30 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
               backgroundColor: "rgba(156,163,175,0.08)",
               borderWidth: 2, pointRadius: 0, pointHitRadius: 6, tension: 0.3, fill: false,
               borderDash: [6, 3],
+            },
+            {
+              label: "Swissquote ($9/trade)",
+              data: sqData,
+              borderColor: "#ef4444",
+              backgroundColor: "rgba(239,68,68,0.06)",
+              borderWidth: 1.5, pointRadius: 0, pointHitRadius: 6, tension: 0.3, fill: false,
+              borderDash: [4, 2],
+            },
+            {
+              label: "IBKR ($1/trade)",
+              data: ibData,
+              borderColor: "#3b82f6",
+              backgroundColor: "rgba(59,130,246,0.06)",
+              borderWidth: 1.5, pointRadius: 0, pointHitRadius: 6, tension: 0.3, fill: false,
+              borderDash: [4, 2],
+            },
+            {
+              label: "Saxo ($3/trade)",
+              data: saxoData,
+              borderColor: "#a855f7",
+              backgroundColor: "rgba(168,85,247,0.06)",
+              borderWidth: 1.5, pointRadius: 0, pointHitRadius: 6, tension: 0.3, fill: false,
+              borderDash: [4, 2],
             }
           ]
         },
@@ -1182,26 +1283,28 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
     });
 
     // Store data for Excel download
-    window._scenarioExcelData = { valid, initialAmount, firstOpen };
+    window._scenarioExcelData = { valid, initialAmount, firstOpen, brokerFees: { sq: 9, ib: 1, saxo: 3 } };
   }
 
   /* ========== Scenario Excel Download ========== */
   document.getElementById("sc-download-btn").addEventListener("click", () => {
     const d = window._scenarioExcelData;
     if (!d) return;
-    const { valid, initialAmount, firstOpen } = d;
+    const { valid, initialAmount, firstOpen, brokerFees } = d;
 
     // Build worksheet data with formulas
     // Columns: A=Date, B=Prev Close, C=Predicted Close, D=Signal (formula),
-    //          E=Open, F=Close, G=Open-to-Close Return (formula), H=Invested,
-    //          I=Action, J=AI Portfolio Value (formula), K=Buy&Hold Value (formula)
+    //          E=Open, F=Close, G=Daily Return (formula), H=Was Invested?,
+    //          I=Invested Now?, J=Action, K=AI Portfolio (formula), L=B&H (formula),
+    //          M=Swissquote (formula), N=IBKR (formula), O=Saxo (formula)
     const ws_data = [];
 
     // Header row (row 1)
     ws_data.push([
       "Date", "Prev Close", "Predicted Close", "Signal (Pred > Prev Close)",
       "Open", "Close", "Daily Return", "Was Invested?", "Invested Now?",
-      "Action", "AI Portfolio Value", "Buy & Hold Value"
+      "Action", "AI Portfolio Value", "Buy & Hold Value",
+      "Swissquote ($9/trade)", "IBKR ($1/trade)", "Saxo ($3/trade)"
     ]);
 
     // Row 2: Day 0 (starting point, no trading)
@@ -1218,6 +1321,9 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       null,           // J2
       initialAmount,  // K2
       initialAmount,  // L2
+      initialAmount,  // M2 - Swissquote
+      initialAmount,  // N2 - IBKR
+      initialAmount,  // O2 - Saxo
     ]);
 
     // Rows 3+: Day 1 onward with formulas
@@ -1238,12 +1344,17 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
         action = "SELL";
       }
 
-      // G: Daily Return formula
-      // BUY day (was No, now Yes):  (Close - Open) / Open
-      // HOLD day (was Yes, now Yes): (Close - PrevClose) / PrevClose
-      // SELL day (was Yes, now No):  (Open - PrevClose) / PrevClose
-      // CASH day (was No, now No):   0
+      // G: Daily Return formula (4-case logic)
       const returnFormula = `IF(AND(H${r}="No",I${r}="Yes"),(F${r}-E${r})/E${r},IF(AND(H${r}="Yes",I${r}="Yes"),(F${r}-B${r})/B${r},IF(AND(H${r}="Yes",I${r}="No"),(E${r}-B${r})/B${r},0)))`;
+
+      // Broker formula: fee deducted on BUY (before return) and SELL (after return)
+      // BUY:  (prev - fee) * (1 + G)
+      // SELL: prev * (1 + G) - fee
+      // HOLD: prev * (1 + G)
+      // CASH: prev
+      function brokerFormula(col, fee) {
+        return `IF(J${r}="BUY",(${col}${r-1}-${fee})*(1+G${r}),IF(J${r}="SELL",${col}${r-1}*(1+G${r})-${fee},IF(I${r}="Yes",${col}${r-1}*(1+G${r}),${col}${r-1})))`;
+      }
 
       ws_data.push([
         valid[i].Date,              // A
@@ -1256,10 +1367,11 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
         wasInvested ? "Yes" : "No", // H: Was Invested?
         xlInvested ? "Yes" : "No",  // I: Invested Now?
         action,                     // J: Action
-        // K: AI Portfolio = prev value * (1 + daily return)
-        { f: `K${r-1}*(1+G${r})` },
-        // L: Buy & Hold = initial * (Close / firstOpen)
-        { f: `K2*(F${r}/E3)` },     // E3 = first open where B&H starts
+        { f: `K${r-1}*(1+G${r})` },            // K: AI Portfolio
+        { f: `K2*(F${r}/E3)` },                 // L: Buy & Hold
+        { f: brokerFormula("M", brokerFees.sq) },  // M: Swissquote
+        { f: brokerFormula("N", brokerFees.ib) },  // N: IBKR
+        { f: brokerFormula("O", brokerFees.saxo) }, // O: Saxo
       ]);
     }
 
@@ -1268,18 +1380,21 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
 
     // Set column widths
     ws["!cols"] = [
-      { wch: 12 }, // Date
-      { wch: 12 }, // Prev Close
-      { wch: 14 }, // Predicted Close
-      { wch: 22 }, // Signal
-      { wch: 12 }, // Open
-      { wch: 12 }, // Close
-      { wch: 18 }, // Daily Return
-      { wch: 14 }, // Was Invested
-      { wch: 14 }, // Invested Now
-      { wch: 8 },  // Action
-      { wch: 18 }, // AI Portfolio
-      { wch: 18 }, // B&H
+      { wch: 12 }, // A: Date
+      { wch: 12 }, // B: Prev Close
+      { wch: 14 }, // C: Predicted Close
+      { wch: 22 }, // D: Signal
+      { wch: 12 }, // E: Open
+      { wch: 12 }, // F: Close
+      { wch: 18 }, // G: Daily Return
+      { wch: 14 }, // H: Was Invested
+      { wch: 14 }, // I: Invested Now
+      { wch: 8 },  // J: Action
+      { wch: 18 }, // K: AI Portfolio
+      { wch: 18 }, // L: B&H
+      { wch: 22 }, // M: Swissquote
+      { wch: 20 }, // N: IBKR
+      { wch: 20 }, // O: Saxo
     ];
 
     // Format number columns as 2-decimal
@@ -1287,7 +1402,7 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
     const pctFmt = "0.00%";
     const range = XLSX.utils.decode_range(ws["!ref"]);
     for (let R = 1; R <= range.e.r; R++) {
-      [1, 2, 4, 5, 10, 11].forEach(C => {
+      [1, 2, 4, 5, 10, 11, 12, 13, 14].forEach(C => {
         const addr = XLSX.utils.encode_cell({ r: R, c: C });
         if (ws[addr]) ws[addr].z = numFmt;
       });
@@ -1312,6 +1427,15 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       ["Buy & Hold Final Value", { f: `Simulation!L${lastRow}` }],
       ["Buy & Hold Return", { f: `(Simulation!L${lastRow}-Simulation!L2)/Simulation!L2` }],
       [],
+      ["Swissquote ($9/trade) Final Value", { f: `Simulation!M${lastRow}` }],
+      ["Swissquote Return", { f: `(Simulation!M${lastRow}-Simulation!M2)/Simulation!M2` }],
+      [],
+      ["Interactive Brokers ($1/trade) Final Value", { f: `Simulation!N${lastRow}` }],
+      ["Interactive Brokers Return", { f: `(Simulation!N${lastRow}-Simulation!N2)/Simulation!N2` }],
+      [],
+      ["Saxo Bank ($3/trade) Final Value", { f: `Simulation!O${lastRow}` }],
+      ["Saxo Bank Return", { f: `(Simulation!O${lastRow}-Simulation!O2)/Simulation!O2` }],
+      [],
       ["How it works:"],
       ["1. At end of each day, the AI predicts tomorrow's close price."],
       ["2. If Predicted Close > Today's Close -> BUY signal (expect rise)."],
@@ -1328,7 +1452,7 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       ["Column I = Invested Now (after action, determines exposure)"],
     ];
     const ws2 = XLSX.utils.aoa_to_sheet(summaryData);
-    ws2["!cols"] = [{ wch: 36 }, { wch: 20 }];
+    ws2["!cols"] = [{ wch: 42 }, { wch: 20 }];
     // Format summary values
     const c2 = XLSX.utils.encode_cell({ r: 2, c: 1 });
     if (ws2[c2]) ws2[c2].z = numFmt;
@@ -1340,6 +1464,15 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
     if (ws2[c9]) ws2[c9].z = numFmt;
     const c10 = XLSX.utils.encode_cell({ r: 10, c: 1 });
     if (ws2[c10]) ws2[c10].z = pctFmt;
+    // Broker summary formatting
+    [12, 15, 18].forEach(row => {
+      const cell = XLSX.utils.encode_cell({ r: row, c: 1 });
+      if (ws2[cell]) ws2[cell].z = numFmt;
+    });
+    [13, 16, 19].forEach(row => {
+      const cell = XLSX.utils.encode_cell({ r: row, c: 1 });
+      if (ws2[cell]) ws2[cell].z = pctFmt;
+    });
     XLSX.utils.book_append_sheet(wb, ws2, "Summary");
 
     XLSX.writeFile(wb, "scenario_simulation.xlsx");
