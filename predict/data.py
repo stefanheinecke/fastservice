@@ -59,11 +59,17 @@ class Predictor:
                 symbol TEXT NOT NULL,
                 date DATE NOT NULL,
                 predicted_close DOUBLE PRECISION,
-                real_close DOUBLE PRECISION
+                real_close DOUBLE PRECISION,
+                real_open DOUBLE PRECISION
             )
         """)
         with self.engine.begin() as conn:
             conn.execute(ddl)
+            # Add real_open column if missing (existing tables)
+            try:
+                conn.execute(text(f"ALTER TABLE {self.TABLE_NAME} ADD COLUMN real_open DOUBLE PRECISION"))
+            except Exception:
+                pass  # column already exists
 
     def create_predictions(self):
         df = load_data(self.symbol)
@@ -269,26 +275,28 @@ class Predictor:
             print("No new records to insert.")
 
     def update_with_real_close(self, df):
-        print("Updating real_close values in Postgres...")
+        print("Updating real_close and real_open values in Postgres...")
 
-        real_close_df = pd.DataFrame({
+        real_df = pd.DataFrame({
             "date": pd.to_datetime(df.index).date,
             "real_close": df["Close"].values,
+            "real_open": df["Open"].values,
         })
 
         update_stmt = text(f"""
             UPDATE {self.TABLE_NAME}
-            SET real_close = :real_close
+            SET real_close = :real_close, real_open = :real_open
             WHERE date = :date AND symbol = :symbol
         """)
 
         with self.engine.begin() as conn:
-            for _, row in real_close_df.iterrows():
+            for _, row in real_df.iterrows():
                 conn.execute(update_stmt, {"real_close": float(row["real_close"]),
+                                           "real_open": float(row["real_open"]),
                                            "date": row["date"],
                                            "symbol": self.symbol})
 
-        print("real_close column updated for matching dates.")
+        print("real_close and real_open columns updated for matching dates.")
 
     def fetch_data_summary(self):
         """Return available date range and row count per symbol."""
@@ -324,7 +332,8 @@ class Predictor:
 
         query = text(f"""
             SELECT date AS "Date", symbol AS "Symbol",
-                   real_close AS "Real_Close", predicted_close AS "Predicted_Close"
+                   real_close AS "Real_Close", predicted_close AS "Predicted_Close",
+                   real_open AS "Real_Open"
             FROM {self.TABLE_NAME}
             WHERE {where_sql}
             ORDER BY date DESC

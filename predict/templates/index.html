@@ -362,8 +362,10 @@
       <h2>Investment Scenario Simulator</h2>
       <p style="color:var(--muted); margin-bottom:1rem">
         Simulate how an investment would have performed if you followed the AI predictions strictly.
-        Each day the model decides: if the predicted close is higher than the current close, buy (or hold).
-        If the predicted close is lower, sell (or stay out). The portfolio is either fully invested or fully in cash.
+        After market close each day, the model predicts tomorrow's close. If it expects a rise,
+        a market-on-open buy order is placed for the next morning. If it expects a drop, a sell order is placed.
+        Trades execute at the next day's <strong style="color:var(--text)">open price</strong>, which is the earliest
+        you can realistically act on the signal. The portfolio is either fully invested or fully in cash.
       </p>
 
       <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.25rem">
@@ -1020,56 +1022,63 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
     // Sort oldest first
     const sorted = [...rows].sort((a, b) => a.Date.localeCompare(b.Date));
 
-    // Filter to rows that have real close prices
-    const valid = sorted.filter(r => r.Real_Close != null && !isNaN(r.Real_Close) && r.Predicted_Close != null);
+    // Filter to rows that have real close AND real open prices
+    const valid = sorted.filter(r => r.Real_Close != null && !isNaN(r.Real_Close)
+      && r.Predicted_Close != null && r.Real_Open != null && !isNaN(r.Real_Open));
     if (valid.length < 2) {
       scError.style.display = "block";
-      scError.textContent = "Not enough data to run simulation.";
+      scError.textContent = "Not enough data to run simulation (open prices may be missing — re-generate predictions to populate them).";
       scContent.style.display = "none";
       return;
     }
 
-    let cash = initialAmount;
-    let shares = 0;
-    let invested = false; // whether we currently hold shares
+    let portfolioValue = initialAmount;
+    let invested = false; // whether we currently hold
     let trades = [];
     let portfolioHistory = []; // {date, value}
 
-    // Buy & hold tracking
-    const firstPrice = valid[0].Real_Close;
-    const bhShares = initialAmount / firstPrice;
+    // Buy & hold tracking: buy at day 1 open, track daily
+    const firstOpen = valid[1].Real_Open; // we start trading on day 1
 
-    for (let i = 0; i < valid.length; i++) {
-      const row = valid[i];
-      const price = row.Real_Close;
-      const predicted = row.Predicted_Close;
+    // Day 0: record starting point
+    portfolioHistory.push({ date: valid[0].Date, value: initialAmount, bhValue: initialAmount });
 
-      // Decision: predicted > current price => want to be invested
-      const shouldInvest = predicted > price;
+    // Realistic flow:
+    // End of day i-1: know Real_Close[i-1], model produces Predicted_Close[i].
+    // Signal: Predicted_Close[i] > Real_Close[i-1] → expect rise → buy at open[i].
+    //         Predicted_Close[i] < Real_Close[i-1] → expect drop → sell at open[i].
+    // Return captured = (close[i] - open[i]) / open[i] (open-to-close on day i).
+    for (let i = 1; i < valid.length; i++) {
+      const prevClose = valid[i - 1].Real_Close;
+      const todayPredicted = valid[i].Predicted_Close;
+      const todayOpen = valid[i].Real_Open;
+      const todayClose = valid[i].Real_Close;
+
+      const shouldInvest = todayPredicted > prevClose;
 
       if (shouldInvest && !invested) {
-        // Buy
-        shares = cash / price;
-        cash = 0;
         invested = true;
-        trades.push({ date: row.Date, action: "BUY", price: price, value: shares * price });
+        trades.push({ date: valid[i].Date, action: "BUY", price: todayOpen, value: portfolioValue });
       } else if (!shouldInvest && invested) {
-        // Sell
-        cash = shares * price;
-        shares = 0;
+        // Sell at today's open
         invested = false;
-        trades.push({ date: row.Date, action: "SELL", price: price, value: cash });
+        trades.push({ date: valid[i].Date, action: "SELL", price: todayOpen, value: portfolioValue });
       }
 
-      // Current portfolio value
-      const currentValue = invested ? shares * price : cash;
-      portfolioHistory.push({ date: row.Date, value: currentValue, bhValue: bhShares * price });
+      // If invested, capture open-to-close return
+      if (invested) {
+        const otcReturn = (todayClose - todayOpen) / todayOpen;
+        portfolioValue *= (1 + otcReturn);
+      }
+
+      const bhValue = initialAmount * (todayClose / firstOpen);
+      portfolioHistory.push({ date: valid[i].Date, value: portfolioValue, bhValue: bhValue });
     }
 
     // Final values
     const lastPrice = valid[valid.length - 1].Real_Close;
-    const finalValue = invested ? shares * lastPrice : cash;
-    const bhFinalValue = bhShares * lastPrice;
+    const finalValue = portfolioValue;
+    const bhFinalValue = initialAmount * (lastPrice / firstOpen);
     const aiReturn = ((finalValue - initialAmount) / initialAmount * 100);
     const bhReturn = ((bhFinalValue - initialAmount) / initialAmount * 100);
 
