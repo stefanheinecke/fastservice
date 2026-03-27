@@ -310,8 +310,11 @@ class Predictor:
 
         df["Real_Close"] = pd.to_numeric(df["Real_Close"], errors="coerce")
         df["Predicted_Close"] = pd.to_numeric(df["Predicted_Close"], errors="coerce")
-        df["Real_Close_diff"] = df["Real_Close"] - df["Real_Close"].shift(-1)
-        df["Predicted_Close_diff"] = df["Predicted_Close"] - df["Predicted_Close"].shift(-1)
+
+        # Direction: did predicted close move same way as real close vs previous day's real close?
+        prev_real = df["Real_Close"].shift(-1)  # previous day (data is DESC)
+        df["Real_Close_diff"] = df["Real_Close"] - prev_real
+        df["Predicted_Close_diff"] = df["Predicted_Close"] - prev_real
 
         df["Correct_Direction"] = (
             ((df["Real_Close_diff"] > 0) & (df["Predicted_Close_diff"] > 0)) |
