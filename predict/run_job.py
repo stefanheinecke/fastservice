@@ -29,6 +29,7 @@ def run_for_symbol(database_url, symbol):
 
 
 if __name__ == "__main__":
+    print("Start Run Job")
     if not DATABASE_URL:
         print("ERROR: DATABASE_URL environment variable not set.")
         sys.exit(1)
