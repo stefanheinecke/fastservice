@@ -1,22 +1,61 @@
 import os
+import sys
 from data import Predictor
+from sqlalchemy import create_engine, text
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-if __name__ == "__main__":
-    symbol = "GC=F"
+def get_all_symbols(database_url):
+    """Fetch distinct symbols that already have predictions in the DB."""
+    engine = create_engine(database_url)
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT DISTINCT symbol FROM predictions ORDER BY symbol"))
+        return [r[0] for r in rows]
 
-    predict_obj = Predictor(DATABASE_URL, symbol)
-    print(f"Storing predictions for {symbol}...")
 
+def run_for_symbol(database_url, symbol):
+    print(f"\n{'='*50}")
+    print(f"Processing {symbol}...")
+    print(f"{'='*50}")
+    predict_obj = Predictor(database_url, symbol)
     forecast_df, past_df, df = predict_obj.create_predictions()
     print(f"Forecast DataFrame for {symbol}:\n{forecast_df}")
-
     predict_obj.store_predictions(past_df)
     print(f"Stored Past Predictions for {symbol}.")
-
     predict_obj.store_predictions(forecast_df)
     print(f"Stored Future Predictions for {symbol}.")
-
     predict_obj.update_with_real_close(df)
-    print("Prediction job completed.")
+    print(f"Completed {symbol}.")
+
+
+if __name__ == "__main__":
+    if not DATABASE_URL:
+        print("ERROR: DATABASE_URL environment variable not set.")
+        sys.exit(1)
+
+    # If a symbol is passed as argument, run only that one
+    if len(sys.argv) > 1:
+        symbols = sys.argv[1:]
+    else:
+        # Otherwise, run for all symbols in the database
+        symbols = get_all_symbols(DATABASE_URL)
+
+    if not symbols:
+        print("No symbols found in database. Nothing to do.")
+        sys.exit(0)
+
+    print(f"Running predictions for {len(symbols)} symbol(s): {', '.join(symbols)}")
+
+    failed = []
+    for symbol in symbols:
+        try:
+            run_for_symbol(DATABASE_URL, symbol)
+        except Exception as e:
+            print(f"ERROR processing {symbol}: {e}")
+            failed.append(symbol)
+
+    print(f"\n{'='*50}")
+    print(f"Job complete. {len(symbols) - len(failed)}/{len(symbols)} succeeded.")
+    if failed:
+        print(f"Failed: {', '.join(failed)}")
+        sys.exit(1)
