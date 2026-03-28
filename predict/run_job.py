@@ -29,34 +29,47 @@ def run_for_symbol(database_url, symbol):
 
 
 if __name__ == "__main__":
-    print("Start Run Job")
-    if not DATABASE_URL:
-        print("ERROR: DATABASE_URL environment variable not set.")
-        sys.exit(1)
+    try:
+        print("Start Run Job")
+        sys.stdout.flush()
+        if not DATABASE_URL:
+            print("ERROR: DATABASE_URL environment variable not set.")
+            sys.stdout.flush()
+            sys.exit(1)
 
-    # If a symbol is passed as argument, run only that one
-    if len(sys.argv) > 1:
-        symbols = sys.argv[1:]
-    else:
-        # Otherwise, run for all symbols in the database
-        symbols = get_all_symbols(DATABASE_URL)
+        # If a symbol is passed as argument, run only that one
+        if len(sys.argv) > 1:
+            symbols = sys.argv[1:]
+        else:
+            # Otherwise, run for all symbols in the database
+            symbols = get_all_symbols(DATABASE_URL)
 
-    if not symbols:
-        print("No symbols found in database. Nothing to do.")
-        sys.exit(0)
+        if not symbols:
+            print("No symbols found in database. Nothing to do.")
+            sys.stdout.flush()
+            sys.exit(0)
 
-    print(f"Running predictions for {len(symbols)} symbol(s): {', '.join(symbols)}")
+        print(f"Running predictions for {len(symbols)} symbol(s): {', '.join(symbols)}")
+        sys.stdout.flush()
 
-    failed = []
-    for symbol in symbols:
-        try:
-            run_for_symbol(DATABASE_URL, symbol)
-        except Exception as e:
-            print(f"ERROR processing {symbol}: {e}")
-            failed.append(symbol)
+        failed = []
+        for symbol in symbols:
+            try:
+                run_for_symbol(DATABASE_URL, symbol)
+                sys.stdout.flush()
+            except Exception as e:
+                print(f"ERROR processing {symbol}: {e}")
+                failed.append(symbol)
+                sys.stdout.flush()
 
-    print(f"\n{'='*50}")
-    print(f"Job complete. {len(symbols) - len(failed)}/{len(symbols)} succeeded.")
-    if failed:
-        print(f"Failed: {', '.join(failed)}")
-        sys.exit(1)
+        print(f"\n{'='*50}")
+        print(f"Job complete. {len(symbols) - len(failed)}/{len(symbols)} succeeded.")
+        if failed:
+            print(f"Failed: {', '.join(failed)}")
+            sys.stdout.flush()
+            sys.exit(1)
+        sys.stdout.flush()
+    except Exception as e:
+        print(f"Top-level error: {e}")
+        sys.stdout.flush()
+        raise
