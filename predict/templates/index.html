@@ -665,19 +665,13 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
     content.style.display = "none";
     error.style.display = "none";
     tbody.innerHTML = "";
-    console("Start Summary");
     try {
       const res = await fetch("/api/summary-predictions");
-      console("Step 1");
       if (!res.ok) throw new Error("Server responded " + res.status);
-      console("Step 2");
       const data = await res.json();
-      console("Step 3");
       if (!Array.isArray(data) || data.length === 0) {
-        console("Step 4");
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted)">No summary data available.</td></tr>';
       } else {
-        console("Step 5");
         data.forEach(row => {
           const tr = document.createElement("tr");
           tr.innerHTML =
@@ -691,11 +685,9 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
           tbody.appendChild(tr);
         });
       }
-      console("Step 6");
       loader.style.display = "none";
       content.style.display = "block";
     } catch (err) {
-      console("Step 7");
       loader.style.display = "none";
       error.style.display = "block";
       error.textContent = "Could not load summary predictions: " + err.message;
