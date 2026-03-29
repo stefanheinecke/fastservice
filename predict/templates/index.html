@@ -677,8 +677,8 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
           tr.innerHTML =
             `<td>${row.symbol || "&mdash;"}</td>` +
             `<td>${row.last_real_close != null ? Number(row.last_real_close).toFixed(2) : "&mdash;"}</td>` +
-            `<td>${row.next_day_prediction != null ? Number(row.next_day_prediction).toFixed(2) : "&mdash;"}</td>` +
-            `<td>${row.correct_direction_pct != null ? row.correct_direction_pct.toFixed(2) + "%" : "&mdash;"}</td>` +
+            `<td>${row.next_pred_value != null ? Number(row.next_pred_value).toFixed(2) : "&mdash;"}</td>` +
+            `<td>${row.correct_direction != null ? row.correct_direction.toFixed(2) + "%" : "&mdash;"}</td>` +
             `<td>${row.mae != null ? "$" + row.mae.toFixed(2) : "&mdash;"}</td>` +
             `<td>${row.rmse != null ? "$" + row.rmse.toFixed(2) : "&mdash;"}</td>` +
             `<td>${row.mape != null ? row.mape.toFixed(2) + "%" : "&mdash;"}</td>`;

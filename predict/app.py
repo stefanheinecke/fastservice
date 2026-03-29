@@ -33,45 +33,59 @@ def index():
 
 @app.route("/api/summary-predictions")
 def api_summary_predictions():
-    """Return next day prediction and last completed day's evaluation for all tickers."""
+    """Return next day prediction and last 30-day evaluation for all tickers (two fast SQL queries)."""
     engine = create_engine(DATABASE_URL)
-    # Get all symbols
     with engine.connect() as conn:
-        symbols = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM predictions ORDER BY symbol"))]
+        # 1) Next-day forecasts (rows with no real_close yet)
+        next_day_rows = conn.execute(text("""
+            SELECT DISTINCT ON (symbol) symbol, date, predicted_close
+            FROM predictions
+            WHERE real_close IS NULL
+            ORDER BY symbol, date DESC
+        """)).fetchall()
+        next_day_map = {r[0]: {"date": str(r[1]), "predicted_close": float(r[2])} for r in next_day_rows}
+
+        # 2) Stats from last 30 completed days per ticker (single query with window functions)
+        stats_rows = conn.execute(text("""
+            WITH ranked AS (
+                SELECT symbol, date, real_close, predicted_close,
+                       LAG(real_close) OVER (PARTITION BY symbol ORDER BY date) AS prev_real_close,
+                       ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) AS rn
+                FROM predictions
+                WHERE real_close IS NOT NULL
+            ),
+            last30 AS (
+                SELECT * FROM ranked WHERE rn <= 30
+            )
+            SELECT symbol,
+                   MAX(CASE WHEN rn = 1 THEN real_close END) AS last_real_close,
+                   MAX(CASE WHEN rn = 1 THEN predicted_close END) AS last_pred_close,
+                   AVG(ABS(real_close - predicted_close)) AS mae,
+                   SQRT(AVG(POWER(real_close - predicted_close, 2))) AS rmse,
+                   AVG(ABS(real_close - predicted_close) / NULLIF(real_close, 0)) * 100 AS mape,
+                   AVG(CASE WHEN prev_real_close IS NOT NULL AND (
+                       (real_close - prev_real_close > 0 AND predicted_close - prev_real_close > 0) OR
+                       (real_close - prev_real_close < 0 AND predicted_close - prev_real_close < 0)
+                   ) THEN 1.0 ELSE 0.0 END) * 100 AS correct_direction
+            FROM last30
+            GROUP BY symbol
+            ORDER BY symbol
+        """)).fetchall()
 
     results = []
-    for symbol in symbols:
-        predictor = Predictor(DATABASE_URL, symbol)
-        # Next day prediction (for auction)
-        next_pred = predictor.fetch_next_day_forecast()
-        # Most recent completed day (with real_close)
-        df, correct_direction_pct, mae = predictor.fetch_prediction_history(limit=30)
-        if not df.empty:
-            last_row = df.iloc[0]
-            last_real_close = last_row["Real_Close"]
-            last_pred_close = last_row["Predicted_Close"]
-            # Calculate RMSE, MAPE for last 30 days
-            y_true = df["Real_Close"].values
-            y_pred = df["Predicted_Close"].values
-            rmse = float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
-            mape = float(np.mean(np.abs((y_true - y_pred) / y_true)) * 100)
-            correct_direction = float(np.mean(df["Correct_Direction"])) * 100
-        else:
-            last_real_close = None
-            last_pred_close = None
-            rmse = None
-            mape = None
-            correct_direction = None
+    for r in stats_rows:
+        sym = r[0]
+        nd = next_day_map.get(sym)
         results.append({
-            "symbol": symbol,
-            "next_pred_date": next_pred["date"] if next_pred else None,
-            "next_pred_value": next_pred["predicted_close"] if next_pred else None,
-            "last_real_close": last_real_close,
-            "last_pred_close": last_pred_close,
-            "mae": round(mae, 2) if mae is not None else None,
-            "rmse": round(rmse, 2) if rmse is not None else None,
-            "mape": round(mape, 2) if mape is not None else None,
-            "correct_direction": round(correct_direction, 2) if correct_direction is not None else None,
+            "symbol": sym,
+            "next_pred_date": nd["date"] if nd else None,
+            "next_pred_value": nd["predicted_close"] if nd else None,
+            "last_real_close": round(float(r[1]), 2) if r[1] is not None else None,
+            "last_pred_close": round(float(r[2]), 2) if r[2] is not None else None,
+            "mae": round(float(r[3]), 2) if r[3] is not None else None,
+            "rmse": round(float(r[4]), 2) if r[4] is not None else None,
+            "mape": round(float(r[5]), 2) if r[5] is not None else None,
+            "correct_direction": round(float(r[6]), 2) if r[6] is not None else None,
         })
     return _json_response(results)
 
