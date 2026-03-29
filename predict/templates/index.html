@@ -226,6 +226,46 @@
     </div>
   </div>
 
+  <!-- ==================== Summary Predictions ==================== -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="summary-predictions">Summary Predictions</button>
+    <button class="tab-btn" data-tab="predictions">Predictions</button>
+    <button class="tab-btn" data-tab="scenario">Scenario</button>
+    <button class="tab-btn" data-tab="about">About</button>
+    <button class="tab-btn" data-tab="api">API</button>
+    <button class="tab-btn" data-tab="contact">Contact</button>
+    <button class="tab-btn" data-tab="privacy">Privacy</button>
+  </div>
+
+  <div id="summary-predictions" class="tab-panel active">
+    <div id="summary-loader" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1rem; padding:4rem 0">
+      <div class="spinner"></div>
+      <span style="color:var(--muted)">Loading summary predictions&hellip;</span>
+    </div>
+    <div id="summary-content" style="display:none">
+      <div class="card">
+        <h2>Summary of Next-Day Predictions</h2>
+        <div class="table-wrap" style="max-height:480px; overflow-y:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Last Real Close</th>
+                <th>Next-Day Prediction</th>
+                <th>Correct Direction (%)</th>
+                <th>MAE</th>
+                <th>RMSE</th>
+                <th>MAPE</th>
+              </tr>
+            </thead>
+            <tbody id="summary-predictions-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div id="summary-predictions-error" class="error-msg" style="margin-top:1rem"></div>
+  </div>
+
   <!-- ==================== Predictions ==================== -->
   <div id="predictions" class="tab-panel active">
     <!-- Ticker + time range selector bar -->
@@ -621,6 +661,50 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       }
     });
   });
+
+  // Load summary predictions on page load
+  window.addEventListener('DOMContentLoaded', () => {
+    loadSummaryPredictions();
+  });
+
+  /* ========== Summary Predictions Loader ========== */
+  async function loadSummaryPredictions() {
+    const loader = document.getElementById("summary-loader");
+    const content = document.getElementById("summary-content");
+    const error = document.getElementById("summary-predictions-error");
+    const tbody = document.getElementById("summary-predictions-body");
+    loader.style.display = "flex";
+    content.style.display = "none";
+    error.style.display = "none";
+    tbody.innerHTML = "";
+    try {
+      const res = await fetch("/api/summary-predictions");
+      if (!res.ok) throw new Error("Server responded " + res.status);
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted)">No summary data available.</td></tr>';
+      } else {
+        data.forEach(row => {
+          const tr = document.createElement("tr");
+          tr.innerHTML =
+            `<td>${row.symbol || "&mdash;"}</td>` +
+            `<td>${row.last_real_close != null ? Number(row.last_real_close).toFixed(2) : "&mdash;"}</td>` +
+            `<td>${row.next_day_prediction != null ? Number(row.next_day_prediction).toFixed(2) : "&mdash;"}</td>` +
+            `<td>${row.correct_direction_pct != null ? row.correct_direction_pct.toFixed(2) + "%" : "&mdash;"}</td>` +
+            `<td>${row.mae != null ? "$" + row.mae.toFixed(2) : "&mdash;"}</td>` +
+            `<td>${row.rmse != null ? "$" + row.rmse.toFixed(2) : "&mdash;"}</td>` +
+            `<td>${row.mape != null ? row.mape.toFixed(2) + "%" : "&mdash;"}</td>`;
+          tbody.appendChild(tr);
+        });
+      }
+      loader.style.display = "none";
+      content.style.display = "block";
+    } catch (err) {
+      loader.style.display = "none";
+      error.style.display = "block";
+      error.textContent = "Could not load summary predictions: " + err.message;
+    }
+  }
 
   /* ========== State ========== */
   let summaryData   = [];     // [{symbol, min_date, max_date, total_rows, rows_with_real}]
