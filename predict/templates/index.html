@@ -136,13 +136,15 @@
 
   <!-- Tabs -->
   <div class="tabs">
-    <button class="tab-btn active" data-tab="predictions">Predictions</button>
-    <button class="tab-btn" data-tab="load-data">Load Data</button>
+    <button class="tab-btn active" data-tab="summary-predictions">Summary Predictions</button>
     <button class="tab-btn" data-tab="scenario">Scenario</button>
+    <button class="tab-btn" data-tab="predictions">History</button>
+    <button class="tab-btn" data-tab="load-data">Load Data</button>
     <button class="tab-btn" data-tab="api">API</button>
     <button class="tab-btn" data-tab="about">About</button>
     <button class="tab-btn" data-tab="contact">Contact</button>
     <button class="tab-btn" data-tab="privacy">Privacy Policy</button>
+    
   </div>
 
   <!-- ==================== Load Data ==================== -->
@@ -499,7 +501,7 @@
       <h2>API Documentation</h2>
       <p>Access prediction data programmatically using the REST endpoints below. All responses are JSON.</p>
 
-      <h3>List All Tickers</h3>
+      <h3>List All Tickers</h2>
       <p>Returns an array of all loaded ticker symbols with their date ranges and row counts.</p>
       <div style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:1rem; margin:.75rem 0 .5rem; font-family:monospace; font-size:.85rem; overflow-x:auto">
         <span style="color:var(--green); font-weight:600">GET</span> <span style="color:var(--text)">/api/data-summary</span>
@@ -515,7 +517,7 @@
   }
 ]</pre>
 
-      <h3>Get Predictions for a Ticker</h3>
+      <h3>Get Predictions for a Ticker</h2>
       <p>Returns prediction data, accuracy metrics, and the next-day forecast for a given ticker symbol.</p>
       <div style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:1rem; margin:.75rem 0 .5rem; font-family:monospace; font-size:.85rem; overflow-x:auto">
         <span style="color:var(--green); font-weight:600">GET</span> <span style="color:var(--text)">/api/predictions?symbol=<em style="color:var(--accent-light)">{TICKER}</em></span>
@@ -536,7 +538,7 @@
 
       <p><strong style="color:var(--text)">Example request:</strong></p>
       <div style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:1rem; margin:.5rem 0 .5rem; font-family:monospace; font-size:.85rem; overflow-x:auto">
-        <span style="color:var(--green); font-weight:600">GET</span> <span style="color:var(--text)">/api/predictions?symbol=GC=F&amp;days=7</span>
+        <span style="color:var(--green); font-weight:600">GET</span> <span style="color:var(--text)">/api/predictions?symbol=GC=F&amp;days=30"</span>
       </div>
 
       <p style="margin-top:.75rem"><strong style="color:var(--text)">Example response:</strong></p>

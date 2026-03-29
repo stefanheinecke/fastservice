@@ -7,6 +7,50 @@ import numpy as np
 import pandas as pd
 from flask import Flask, render_template, send_file, Response, request
 from data import Predictor
+from sqlalchemy import create_engine, text
+@app.route("/api/summary-predictions")
+def api_summary_predictions():
+    """Return next day prediction and last completed day's evaluation for all tickers."""
+    engine = create_engine(DATABASE_URL)
+    # Get all symbols
+    with engine.connect() as conn:
+        symbols = [r[0] for r in conn.execute(text("SELECT DISTINCT symbol FROM predictions ORDER BY symbol"))]
+
+    results = []
+    for symbol in symbols:
+        predictor = Predictor(DATABASE_URL, symbol)
+        # Next day prediction (for auction)
+        next_pred = predictor.fetch_next_day_forecast()
+        # Most recent completed day (with real_close)
+        df, correct_direction_pct, mae = predictor.fetch_prediction_history(limit=30)
+        if not df.empty:
+            last_row = df.iloc[0]
+            last_real_close = last_row["Real_Close"]
+            last_pred_close = last_row["Predicted_Close"]
+            # Calculate RMSE, MAPE for last 30 days
+            y_true = df["Real_Close"].values
+            y_pred = df["Predicted_Close"].values
+            rmse = float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
+            mape = float(np.mean(np.abs((y_true - y_pred) / y_true)) * 100)
+            correct_direction = float(np.mean(df["Correct_Direction"])) * 100
+        else:
+            last_real_close = None
+            last_pred_close = None
+            rmse = None
+            mape = None
+            correct_direction = None
+        results.append({
+            "symbol": symbol,
+            "next_pred_date": next_pred["date"] if next_pred else None,
+            "next_pred_value": next_pred["predicted_close"] if next_pred else None,
+            "last_real_close": last_real_close,
+            "last_pred_close": last_pred_close,
+            "mae": round(mae, 2) if mae is not None else None,
+            "rmse": round(rmse, 2) if rmse is not None else None,
+            "mape": round(mape, 2) if mape is not None else None,
+            "correct_direction": round(correct_direction, 2) if correct_direction is not None else None,
+        })
+    return _json_response(results)
 
 app = Flask(__name__)
 
