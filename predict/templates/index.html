@@ -689,6 +689,9 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       }
       loader.style.display = "none";
       content.style.display = "block";
+      // Debug: log computed styles
+      console.log('loader display:', getComputedStyle(loader).display);
+      console.log('content display:', getComputedStyle(content).display);
     } catch (err) {
       loader.style.display = "none";
       error.style.display = "block";
