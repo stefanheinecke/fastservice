@@ -134,15 +134,46 @@
     <p>Forecast tomorrow's price with AI-driven insights powered by deep learning.</p>
   </header>
 
-  <!-- Tabs (single bar) -->
+  <!-- Tabs (restored and corrected order) -->
   <div class="tabs">
     <button class="tab-btn active" data-tab="summary-predictions">Summary Predictions</button>
+    <button class="tab-btn" data-tab="load-data">Load Data</button>
     <button class="tab-btn" data-tab="predictions">Predictions</button>
     <button class="tab-btn" data-tab="scenario">Scenario</button>
     <button class="tab-btn" data-tab="about">About</button>
     <button class="tab-btn" data-tab="api">API</button>
     <button class="tab-btn" data-tab="contact">Contact</button>
     <button class="tab-btn" data-tab="privacy">Privacy</button>
+  </div>
+
+  <!-- ==================== Summary Predictions ==================== -->
+  <div id="summary-predictions" class="tab-panel active">
+    <div id="summary-loader" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1rem; padding:4rem 0">
+      <div class="spinner"></div>
+      <span style="color:var(--muted)">Loading summary predictions&hellip;</span>
+    </div>
+    <div id="summary-content" style="display:none">
+      <div class="card">
+        <h2>Summary of Next-Day Predictions</h2>
+        <div class="table-wrap" style="max-height:480px; overflow-y:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Last Real Close</th>
+                <th>Next-Day Prediction</th>
+                <th>Correct Direction (%)</th>
+                <th>MAE</th>
+                <th>RMSE</th>
+                <th>MAPE</th>
+              </tr>
+            </thead>
+            <tbody id="summary-predictions-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div id="summary-predictions-error" class="error-msg" style="margin-top:1rem"></div>
   </div>
 
   <!-- ==================== Load Data ==================== -->
@@ -224,38 +255,8 @@
     </div>
   </div>
 
-  <!-- ==================== Summary Predictions ==================== -->
-  <div id="summary-predictions" class="tab-panel active">
-    <div id="summary-loader" style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1rem; padding:4rem 0">
-      <div class="spinner"></div>
-      <span style="color:var(--muted)">Loading summary predictions&hellip;</span>
-    </div>
-    <div id="summary-content" style="display:none">
-      <div class="card">
-        <h2>Summary of Next-Day Predictions</h2>
-        <div class="table-wrap" style="max-height:480px; overflow-y:auto">
-          <table>
-            <thead>
-              <tr>
-                <th>Ticker</th>
-                <th>Last Real Close</th>
-                <th>Next-Day Prediction</th>
-                <th>Correct Direction (%)</th>
-                <th>MAE</th>
-                <th>RMSE</th>
-                <th>MAPE</th>
-              </tr>
-            </thead>
-            <tbody id="summary-predictions-body"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-    <div id="summary-predictions-error" class="error-msg" style="margin-top:1rem"></div>
-  </div>
-
   <!-- ==================== Predictions ==================== -->
-  <div id="predictions" class="tab-panel active">
+  <div id="predictions" class="tab-panel">
     <!-- Ticker + time range selector bar -->
     <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem">
       <div>
