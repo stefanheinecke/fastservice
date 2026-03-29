@@ -657,6 +657,7 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
 
   /* ========== Summary Predictions Loader ========== */
   async function loadSummaryPredictions() {
+    console.log('loadSummaryPredictions called');
     const loader = document.getElementById("summary-loader");
     const content = document.getElementById("summary-content");
     const error = document.getElementById("summary-predictions-error");
@@ -667,8 +668,9 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
     tbody.innerHTML = "";
     try {
       const res = await fetch("/api/summary-predictions");
-      if (!res.ok) throw new Error("Server responded " + res.status);
+      console.log('API response status:', res.status);
       const data = await res.json();
+      console.log('API response data:', data);
       if (!Array.isArray(data) || data.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted)">No summary data available.</td></tr>';
       } else {
