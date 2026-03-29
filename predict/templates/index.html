@@ -609,11 +609,16 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
 <script>
   /* ========== Tabs ========== */
   document.querySelectorAll(".tab-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", function() {
       document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
       document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
-      btn.classList.add("active");
-      document.getElementById(btn.dataset.tab).classList.add("active");
+      this.classList.add("active");
+      const tab = this.getAttribute('data-tab');
+      const panel = document.getElementById(tab);
+      if (panel) {
+        panel.classList.add("active");
+        if (tab === 'summary-predictions') loadSummaryPredictions();
+      }
     });
   });
 
