@@ -8,6 +8,29 @@ import pandas as pd
 from flask import Flask, render_template, send_file, Response, request
 from data import Predictor
 from sqlalchemy import create_engine, text
+
+app = Flask(__name__)
+
+DATABASE_URL = os.environ.get("DATABASE_URL")
+SYMBOL = "GC=F"
+
+
+def _get_predictor(symbol=None):
+    return Predictor(DATABASE_URL, symbol or SYMBOL)
+
+
+def _json_response(data):
+    """Serialize to JSON, converting NaN/Infinity to null."""
+    body = json.dumps(data, default=str, allow_nan=False)
+    return Response(body, mimetype="application/json")
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+# -- API --
+
 @app.route("/api/summary-predictions")
 def api_summary_predictions():
     """Return next day prediction and last completed day's evaluation for all tickers."""
@@ -51,28 +74,6 @@ def api_summary_predictions():
             "correct_direction": round(correct_direction, 2) if correct_direction is not None else None,
         })
     return _json_response(results)
-
-app = Flask(__name__)
-
-DATABASE_URL = os.environ.get("DATABASE_URL")
-SYMBOL = "GC=F"
-
-
-def _get_predictor(symbol=None):
-    return Predictor(DATABASE_URL, symbol or SYMBOL)
-
-
-def _json_response(data):
-    """Serialize to JSON, converting NaN/Infinity to null."""
-    body = json.dumps(data, default=str, allow_nan=False)
-    return Response(body, mimetype="application/json")
-
-@app.route("/")
-def index():
-    return render_template("index.html")
-
-
-# -- API --
 
 @app.route("/api/data-summary")
 def api_data_summary():
