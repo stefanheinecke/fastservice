@@ -31,63 +31,6 @@ def index():
 
 # -- API --
 
-@app.route("/api/summary-predictions")
-def api_summary_predictions():
-    """Return next day prediction and last 30-day evaluation for all tickers (two fast SQL queries)."""
-    engine = create_engine(DATABASE_URL)
-    with engine.connect() as conn:
-        # 1) Next-day forecasts (rows with no real_close yet)
-        next_day_rows = conn.execute(text("""
-            SELECT DISTINCT ON (symbol) symbol, date, predicted_close
-            FROM predictions
-            WHERE real_close IS NULL
-            ORDER BY symbol, date DESC
-        """)).fetchall()
-        next_day_map = {r[0]: {"date": str(r[1]), "predicted_close": float(r[2])} for r in next_day_rows}
-
-        # 2) Stats from last 30 completed days per ticker (single query with window functions)
-        stats_rows = conn.execute(text("""
-            WITH ranked AS (
-                SELECT symbol, date, real_close, predicted_close,
-                       LAG(real_close) OVER (PARTITION BY symbol ORDER BY date) AS prev_real_close,
-                       ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) AS rn
-                FROM predictions
-                WHERE real_close IS NOT NULL
-            ),
-            last30 AS (
-                SELECT * FROM ranked WHERE rn <= 30
-            )
-            SELECT symbol,
-                   MAX(CASE WHEN rn = 1 THEN real_close END) AS last_real_close,
-                   MAX(CASE WHEN rn = 1 THEN predicted_close END) AS last_pred_close,
-                   AVG(ABS(real_close - predicted_close)) AS mae,
-                   SQRT(AVG(POWER(real_close - predicted_close, 2))) AS rmse,
-                   AVG(ABS(real_close - predicted_close) / NULLIF(real_close, 0)) * 100 AS mape,
-                   AVG(CASE WHEN prev_real_close IS NOT NULL AND (
-                       (real_close - prev_real_close > 0 AND predicted_close - prev_real_close > 0) OR
-                       (real_close - prev_real_close < 0 AND predicted_close - prev_real_close < 0)
-                   ) THEN 1.0 ELSE 0.0 END) * 100 AS correct_direction
-            FROM last30
-            GROUP BY symbol
-            ORDER BY symbol
-        """)).fetchall()
-
-    results = []
-    for r in stats_rows:
-        sym = r[0]
-        nd = next_day_map.get(sym)
-        results.append({
-            "symbol": sym,
-            "next_pred_date": nd["date"] if nd else None,
-            "next_pred_value": nd["predicted_close"] if nd else None,
-            "last_real_close": round(float(r[1]), 2) if r[1] is not None else None,
-            "last_pred_close": round(float(r[2]), 2) if r[2] is not None else None,
-            "mae": round(float(r[3]), 2) if r[3] is not None else None,
-            "rmse": round(float(r[4]), 2) if r[4] is not None else None,
-            "mape": round(float(r[5]), 2) if r[5] is not None else None,
-            "correct_direction": round(float(r[6]), 2) if r[6] is not None else None,
-        })
-    return _json_response(results)
 
 @app.route("/api/data-summary")
 def api_data_summary():
@@ -150,6 +93,8 @@ def store_predictions():
     predictor.store_predictions(past_df)
     predictor.store_predictions(forecast_df)
     predictor.update_with_real_close(df)
+    # Calculate and store stats after storing predictions
+    predictor.store_latest_stats()
     all_preds = pd.concat([past_df, forecast_df])
     min_date = str(all_preds["Date"].min())
     max_date = str(all_preds["Date"].max())
@@ -178,58 +123,6 @@ def flush_predictions():
         deleted = result.rowcount
     return _json_response({"message": f"Deleted {deleted} rows for {symbol}.", "deleted": deleted})
 
-@app.route("/api/summary-predictions/<symbol>")
-def api_summary_predictions_symbol(symbol):
-    """Return next day prediction and last 30-day evaluation for a single ticker."""
-    engine = create_engine(DATABASE_URL)
-    with engine.connect() as conn:
-        # Next-day forecast for this symbol
-        next_day_row = conn.execute(text("""
-            SELECT date, predicted_close
-            FROM predictions
-            WHERE real_close IS NULL AND symbol = :symbol
-            ORDER BY date DESC
-            LIMIT 1
-        """), {"symbol": symbol}).fetchone()
-        next_day = {"date": str(next_day_row[0]), "predicted_close": float(next_day_row[1])} if next_day_row else None
-
-        # Stats from last 30 completed days for this symbol
-        stats_row = conn.execute(text("""
-            WITH ranked AS (
-                SELECT date, real_close, predicted_close,
-                       LAG(real_close) OVER (ORDER BY date) AS prev_real_close,
-                       ROW_NUMBER() OVER (ORDER BY date DESC) AS rn
-                FROM predictions
-                WHERE real_close IS NOT NULL AND symbol = :symbol
-            ),
-            last30 AS (
-                SELECT * FROM ranked WHERE rn <= 30
-            )
-            SELECT
-                MAX(CASE WHEN rn = 1 THEN real_close END) AS last_real_close,
-                MAX(CASE WHEN rn = 1 THEN predicted_close END) AS last_pred_close,
-                AVG(ABS(real_close - predicted_close)) AS mae,
-                SQRT(AVG(POWER(real_close - predicted_close, 2))) AS rmse,
-                AVG(ABS(real_close - predicted_close) / NULLIF(real_close, 0)) * 100 AS mape,
-                AVG(CASE WHEN prev_real_close IS NOT NULL AND (
-                    (real_close - prev_real_close > 0 AND predicted_close - prev_real_close > 0) OR
-                    (real_close - prev_real_close < 0 AND predicted_close - prev_real_close < 0)
-                ) THEN 1.0 ELSE 0.0 END) * 100 AS correct_direction
-            FROM last30
-        """), {"symbol": symbol}).fetchone()
-
-    result = {
-        "symbol": symbol,
-        "next_pred_date": next_day["date"] if next_day else None,
-        "next_pred_value": next_day["predicted_close"] if next_day else None,
-        "last_real_close": round(float(stats_row[0]), 2) if stats_row and stats_row[0] is not None else None,
-        "last_pred_close": round(float(stats_row[1]), 2) if stats_row and stats_row[1] is not None else None,
-        "mae": round(float(stats_row[2]), 2) if stats_row and stats_row[2] is not None else None,
-        "rmse": round(float(stats_row[3]), 2) if stats_row and stats_row[3] is not None else None,
-        "mape": round(float(stats_row[4]), 2) if stats_row and stats_row[4] is not None else None,
-        "correct_direction": round(float(stats_row[5]), 2) if stats_row and stats_row[5] is not None else None,
-    }
-    return _json_response(result)
 
 @app.route("/robots.txt")
 def robots():

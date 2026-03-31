@@ -18,7 +18,7 @@ def run_for_symbol(database_url, symbol):
     print(f"Processing {symbol}...")
     print(f"{'='*50}")
     predict_obj = Predictor(database_url, symbol)
-    forecast_df, past_df, df, stats = predict_obj.create_predictions()
+    forecast_df, past_df, df = predict_obj.create_predictions()
     print(f"Forecast DataFrame for {symbol}:\n{forecast_df}")
     predict_obj.store_predictions(past_df)
     print(f"Stored Past Predictions for {symbol}.")
@@ -26,9 +26,9 @@ def run_for_symbol(database_url, symbol):
     print(f"Stored Future Predictions for {symbol}.")
     predict_obj.update_with_real_close(df)
 
-    # Fetch and store stats for this symbol
+    # Calculate and store stats for this symbol using unified method
     try:
-        predict_obj.store_prediction_stats(stats)
+        predict_obj.store_latest_stats()
         print(f"Stored prediction stats for {symbol}.")
     except Exception as e:
         print(f"ERROR storing prediction stats for {symbol}: {e}")
