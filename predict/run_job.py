@@ -25,6 +25,27 @@ def run_for_symbol(database_url, symbol):
     predict_obj.store_predictions(forecast_df)
     print(f"Stored Future Predictions for {symbol}.")
     predict_obj.update_with_real_close(df)
+
+    # Fetch and store stats for this symbol
+    import requests
+    try:
+        api_url = f"http://localhost:5000/api/summary-predictions/{symbol}"
+        print(f"Fetching summary stats for {symbol} from {api_url} ...")
+        resp = requests.get(api_url)
+        resp.raise_for_status()
+        stat = resp.json()
+        stats_dict = {
+            "correct_direction": stat.get("correct_direction"),
+            "close_correct": None,  # Not provided by API
+            "mae": stat.get("mae"),
+            "rmse": stat.get("rmse"),
+            "mape": stat.get("mape"),
+        }
+        stat_date = stat.get("next_pred_date") or None
+        Predictor(database_url, symbol).store_prediction_stats(stats_dict, stat_date=stat_date)
+        print(f"Stored prediction stats for {symbol}.")
+    except Exception as e:
+        print(f"ERROR storing prediction stats for {symbol}: {e}")
     print(f"Completed {symbol}.")
 
 
@@ -69,6 +90,8 @@ if __name__ == "__main__":
             sys.stdout.flush()
             sys.exit(1)
         sys.stdout.flush()
+
+        # (Per-symbol stats storage now handled in run_for_symbol)
     except Exception as e:
         print(f"Top-level error: {e}")
         sys.stdout.flush()
