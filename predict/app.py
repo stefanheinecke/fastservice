@@ -34,30 +34,39 @@ def index():
 # Restore /api/summary-predictions endpoint
 @app.route("/api/summary-predictions")
 def api_summary_predictions():
-    engine = create_engine(DATABASE_URL)
-    with engine.connect() as conn:
-        symbols = pd.read_sql("SELECT DISTINCT symbol FROM predictions ORDER BY symbol", conn)["symbol"].tolist()
-    results = []
-    for symbol in symbols:
-        predictor = _get_predictor(symbol)
-        df, correct_direction_perc, mae, rmse, mape, close_correct = predictor.fetch_prediction_history(limit=30)
-        forecast = predictor.fetch_next_day_forecast()
-        next_pred_date = None
-        next_pred_value = None
-        if not forecast.empty:
-            next_pred_date = str(forecast.iloc[0]["Date"])
-            next_pred_value = float(forecast.iloc[0]["Predicted_Close"])
-        results.append({
-            "symbol": symbol,
-            "next_pred_date": next_pred_date,
-            "next_pred_value": next_pred_value,
-            "mae": round(mae, 2) if mae is not None else None,
-            "rmse": round(rmse, 2) if rmse is not None else None,
-            "mape": round(mape, 2) if mape is not None else None,
-            "correct_direction": round(correct_direction_perc, 2) if correct_direction_perc is not None else None,
-            "close_correct": round(close_correct, 2) if close_correct is not None else None,
-        })
-    return _json_response(results)
+    try:
+        engine = create_engine(DATABASE_URL)
+        with engine.connect() as conn:
+            symbols = pd.read_sql("SELECT DISTINCT symbol FROM predictions ORDER BY symbol", conn)["symbol"].tolist()
+        results = []
+        for symbol in symbols:
+            try:
+                predictor = _get_predictor(symbol)
+                df, correct_direction_perc, mae, rmse, mape, close_correct = predictor.fetch_prediction_history(limit=30)
+                forecast = predictor.fetch_next_day_forecast()
+                next_pred_date = None
+                next_pred_value = None
+                if not forecast.empty:
+                    next_pred_date = str(forecast.iloc[0]["Date"])
+                    next_pred_value = float(forecast.iloc[0]["Predicted_Close"])
+                results.append({
+                    "symbol": symbol,
+                    "next_pred_date": next_pred_date,
+                    "next_pred_value": next_pred_value,
+                    "mae": round(mae, 2) if mae is not None else None,
+                    "rmse": round(rmse, 2) if rmse is not None else None,
+                    "mape": round(mape, 2) if mape is not None else None,
+                    "correct_direction": round(correct_direction_perc, 2) if correct_direction_perc is not None else None,
+                    "close_correct": round(close_correct, 2) if close_correct is not None else None,
+                })
+            except Exception as e:
+                import traceback
+                print(f"Error processing symbol {symbol}: {e}\n{traceback.format_exc()}")
+        return _json_response(results)
+    except Exception as e:
+        import traceback
+        print(f"Error in /api/summary-predictions: {e}\n{traceback.format_exc()}")
+        return _json_response({"error": str(e), "trace": traceback.format_exc()}), 500
 
 @app.route("/api/data-summary")
 def api_data_summary():
