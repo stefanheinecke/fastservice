@@ -52,8 +52,8 @@ class Predictor:
         self._ensure_table()
 
     def _ensure_table(self):
-        """Create the predictions table if it doesn't exist."""
-        ddl = text(f"""
+        """Create the predictions and prediction_stats tables if they don't exist."""
+        ddl_predictions = text(f"""
             CREATE TABLE IF NOT EXISTS {self.TABLE_NAME} (
                 id TEXT PRIMARY KEY,
                 symbol TEXT NOT NULL,
@@ -63,8 +63,23 @@ class Predictor:
                 real_open DOUBLE PRECISION
             )
         """)
+        ddl_stats = text("""
+            CREATE TABLE IF NOT EXISTS prediction_stats (
+                id SERIAL PRIMARY KEY,
+                symbol TEXT NOT NULL,
+                stat_date DATE NOT NULL,
+                window_size INTEGER NOT NULL,
+                correct_direction DOUBLE PRECISION,
+                close_correct DOUBLE PRECISION,
+                mae DOUBLE PRECISION,
+                rmse DOUBLE PRECISION,
+                mape DOUBLE PRECISION,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         with self.engine.begin() as conn:
-            conn.execute(ddl)
+            conn.execute(ddl_predictions)
+            conn.execute(ddl_stats)
             # Add real_open column if missing (existing tables)
             try:
                 conn.execute(text(f"ALTER TABLE {self.TABLE_NAME} ADD COLUMN real_open DOUBLE PRECISION"))

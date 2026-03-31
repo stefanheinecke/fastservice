@@ -154,7 +154,7 @@
     </div>
     <div id="summary-content" style="display:none">
       <div class="card">
-        <h2>Summary of Next-Day Predictions</h2>
+        <h2 id="summary-heading">Summary of Next-Day Predictions</h2>
         <div class="table-wrap" style="max-height:480px; overflow-y:auto">
           <table>
             <thead>
@@ -693,6 +693,19 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       console.log('API response status:', res.status);
       const data = await res.json();
       console.log('API response data:', data);
+      // Find the latest next_pred_date
+      let latestDate = null;
+      data.forEach(row => {
+        if (row.next_pred_date) {
+          if (!latestDate || row.next_pred_date > latestDate) latestDate = row.next_pred_date;
+        }
+      });
+      const heading = document.getElementById("summary-heading");
+      if (latestDate) {
+        heading.textContent = `Summary of Next-Day Predictions (${latestDate})`;
+      } else {
+        heading.textContent = 'Summary of Next-Day Predictions';
+      }
       if (!Array.isArray(data) || data.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted)">No summary data available.</td></tr>';
       } else {
