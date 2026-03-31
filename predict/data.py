@@ -281,7 +281,14 @@ class Predictor:
             "Predicted_Close": [round(future_price, 2)],
         })
         forecast_df["Symbol"] = self.symbol
-        return forecast_df, past_df, df
+        stats = {
+            "mae": float(real_mae) if real_mae is not None else None,
+            "rmse": float(rmse) if rmse is not None else None,
+            "mape": float(mape) if mape is not None else None,
+            "correct_direction": float(direction_acc) * 100 if direction_acc is not None else None,
+            "close_correct": None,  # Not calculated here
+        }
+        return forecast_df, past_df, df, stats
 
     def store_predictions(self, predictions_df):
         """

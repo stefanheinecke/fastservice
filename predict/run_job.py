@@ -18,7 +18,7 @@ def run_for_symbol(database_url, symbol):
     print(f"Processing {symbol}...")
     print(f"{'='*50}")
     predict_obj = Predictor(database_url, symbol)
-    forecast_df, past_df, df = predict_obj.create_predictions()
+    forecast_df, past_df, df, stats = predict_obj.create_predictions()
     print(f"Forecast DataFrame for {symbol}:\n{forecast_df}")
     predict_obj.store_predictions(past_df)
     print(f"Stored Past Predictions for {symbol}.")
@@ -27,22 +27,8 @@ def run_for_symbol(database_url, symbol):
     predict_obj.update_with_real_close(df)
 
     # Fetch and store stats for this symbol
-    import requests
     try:
-        api_url = f"http://localhost:5000/api/summary-predictions/{symbol}"
-        print(f"Fetching summary stats for {symbol} from {api_url} ...")
-        resp = requests.get(api_url)
-        resp.raise_for_status()
-        stat = resp.json()
-        stats_dict = {
-            "correct_direction": stat.get("correct_direction"),
-            "close_correct": None,  # Not provided by API
-            "mae": stat.get("mae"),
-            "rmse": stat.get("rmse"),
-            "mape": stat.get("mape"),
-        }
-        stat_date = stat.get("next_pred_date") or None
-        Predictor(database_url, symbol).store_prediction_stats(stats_dict, stat_date=stat_date)
+        predict_obj.store_prediction_stats(stats)
         print(f"Stored prediction stats for {symbol}.")
     except Exception as e:
         print(f"ERROR storing prediction stats for {symbol}: {e}")
