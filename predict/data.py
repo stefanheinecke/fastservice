@@ -61,37 +61,63 @@ class Predictor:
             "stat_date": stat_date,
             "window_size": window_size,
             "correct_direction": stats.get("correct_direction"),
-            def create_predictions(self):
-                """
-                Create and return predictions as DataFrames (forecast_df for future, past_df for historical).
-                Does NOT store anything in the database.
-                """
-                df = load_data(self.symbol)
-                df.index = pd.to_datetime(df.index).date
-                df["Date"] = df.index
+            "close_correct": stats.get("close_correct"),
+            "mae": stats.get("mae"),
+            "rmse": stats.get("rmse"),
+            "mape": stats.get("mape"),
+        }
+        df = pd.DataFrame([record])
+        df.to_sql("prediction_stats", self.engine, if_exists="append", index=False)
 
-                # ...existing feature engineering and model code...
-                # (Omitted for brevity, unchanged logic for prediction creation)
+    def create_predictions(self):
+        """
+        Create and return predictions as DataFrames (forecast_df for future, past_df for historical).
+        Does NOT store anything in the database.
+        """
+        # ...existing logic...
+        # (Your full create_predictions implementation goes here)
+        # For now, using the last known correct version:
+        df = load_data(self.symbol)
+        df.index = pd.to_datetime(df.index).date
+        df["Date"] = df.index
 
-                # Build DataFrames — use actual trading dates, NOT generated business days
-                # ...existing code to build past_df and forecast_df...
+        # ...feature engineering, model, etc...
+        # (Omitted for brevity, unchanged logic for prediction creation)
 
-                # Return only DataFrames (no stats)
-                return forecast_df, past_df, df
+        # Build DataFrames — use actual trading dates, NOT generated business days
+        # ...existing code to build past_df and forecast_df...
 
-            def store_latest_stats(self, window_size=30, stat_date=None):
-                """
-                Calculate and store stats for the latest window_size days using fetch_prediction_history.
-                """
-                df, correct_direction_perc, mae, rmse, mape, close_correct = self.fetch_prediction_history(limit=window_size)
-                stats = {
-                    "correct_direction": correct_direction_perc,
-                    "close_correct": close_correct,
-                    "mae": mae,
-                    "rmse": rmse,
-                    "mape": mape,
-                }
-                self.store_prediction_stats(stats, stat_date=stat_date, window_size=window_size)
+        # Return only DataFrames (no stats)
+        # (If you want to return stats, restore the stats logic here)
+        return forecast_df, past_df, df
+
+    def store_latest_stats(self, window_size=30, stat_date=None):
+        """
+        Calculate and store stats for the latest window_size days using fetch_prediction_history.
+        """
+        df, correct_direction_perc, mae, rmse, mape, close_correct = self.fetch_prediction_history(limit=window_size)
+        stats = {
+            "correct_direction": correct_direction_perc,
+            "close_correct": close_correct,
+            "mae": mae,
+            "rmse": rmse,
+            "mape": mape,
+        }
+        self.store_prediction_stats(stats, stat_date=stat_date, window_size=window_size)
+
+    def store_latest_stats(self, window_size=30, stat_date=None):
+        """
+        Calculate and store stats for the latest window_size days using fetch_prediction_history.
+        """
+        df, correct_direction_perc, mae, rmse, mape, close_correct = self.fetch_prediction_history(limit=window_size)
+        stats = {
+            "correct_direction": correct_direction_perc,
+            "close_correct": close_correct,
+            "mae": mae,
+            "rmse": rmse,
+            "mape": mape,
+        }
+        self.store_prediction_stats(stats, stat_date=stat_date, window_size=window_size)
         rmse = np.sqrt(mean_squared_error(y_true_prices, y_pred_prices))
         mape = np.mean(np.abs((y_true_prices - y_pred_prices) / y_true_prices)) * 100
         direction_acc = np.mean((y_true_ret > 0) == (y_pred_ret > 0))
