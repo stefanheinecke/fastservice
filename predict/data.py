@@ -45,6 +45,10 @@ def load_data(symbol: str):
 
 
 class Predictor:
+    def __init__(self, database_url, symbol):
+        self.engine = create_engine(database_url)
+        self.symbol = symbol
+        self._ensure_table()
     TABLE_NAME = "predictions"
 
     def store_prediction_stats(self, stats: dict, stat_date=None, window_size=30):
