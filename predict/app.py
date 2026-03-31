@@ -1,55 +1,3 @@
-@app.route("/api/summary-predictions/<symbol>")
-def api_summary_predictions_symbol(symbol):
-    """Return next day prediction and last 30-day evaluation for a single ticker."""
-    engine = create_engine(DATABASE_URL)
-    with engine.connect() as conn:
-        # Next-day forecast for this symbol
-        next_day_row = conn.execute(text("""
-            SELECT date, predicted_close
-            FROM predictions
-            WHERE real_close IS NULL AND symbol = :symbol
-            ORDER BY date DESC
-            LIMIT 1
-        """), {"symbol": symbol}).fetchone()
-        next_day = {"date": str(next_day_row[0]), "predicted_close": float(next_day_row[1])} if next_day_row else None
-
-        # Stats from last 30 completed days for this symbol
-        stats_row = conn.execute(text("""
-            WITH ranked AS (
-                SELECT date, real_close, predicted_close,
-                       LAG(real_close) OVER (ORDER BY date) AS prev_real_close,
-                       ROW_NUMBER() OVER (ORDER BY date DESC) AS rn
-                FROM predictions
-                WHERE real_close IS NOT NULL AND symbol = :symbol
-            ),
-            last30 AS (
-                SELECT * FROM ranked WHERE rn <= 30
-            )
-            SELECT
-                MAX(CASE WHEN rn = 1 THEN real_close END) AS last_real_close,
-                MAX(CASE WHEN rn = 1 THEN predicted_close END) AS last_pred_close,
-                AVG(ABS(real_close - predicted_close)) AS mae,
-                SQRT(AVG(POWER(real_close - predicted_close, 2))) AS rmse,
-                AVG(ABS(real_close - predicted_close) / NULLIF(real_close, 0)) * 100 AS mape,
-                AVG(CASE WHEN prev_real_close IS NOT NULL AND (
-                    (real_close - prev_real_close > 0 AND predicted_close - prev_real_close > 0) OR
-                    (real_close - prev_real_close < 0 AND predicted_close - prev_real_close < 0)
-                ) THEN 1.0 ELSE 0.0 END) * 100 AS correct_direction
-            FROM last30
-        """), {"symbol": symbol}).fetchone()
-
-    result = {
-        "symbol": symbol,
-        "next_pred_date": next_day["date"] if next_day else None,
-        "next_pred_value": next_day["predicted_close"] if next_day else None,
-        "last_real_close": round(float(stats_row[0]), 2) if stats_row and stats_row[0] is not None else None,
-        "last_pred_close": round(float(stats_row[1]), 2) if stats_row and stats_row[1] is not None else None,
-        "mae": round(float(stats_row[2]), 2) if stats_row and stats_row[2] is not None else None,
-        "rmse": round(float(stats_row[3]), 2) if stats_row and stats_row[3] is not None else None,
-        "mape": round(float(stats_row[4]), 2) if stats_row and stats_row[4] is not None else None,
-        "correct_direction": round(float(stats_row[5]), 2) if stats_row and stats_row[5] is not None else None,
-    }
-    return _json_response(result)
 import io
 import os
 import json
@@ -230,6 +178,58 @@ def flush_predictions():
         deleted = result.rowcount
     return _json_response({"message": f"Deleted {deleted} rows for {symbol}.", "deleted": deleted})
 
+@app.route("/api/summary-predictions/<symbol>")
+def api_summary_predictions_symbol(symbol):
+    """Return next day prediction and last 30-day evaluation for a single ticker."""
+    engine = create_engine(DATABASE_URL)
+    with engine.connect() as conn:
+        # Next-day forecast for this symbol
+        next_day_row = conn.execute(text("""
+            SELECT date, predicted_close
+            FROM predictions
+            WHERE real_close IS NULL AND symbol = :symbol
+            ORDER BY date DESC
+            LIMIT 1
+        """), {"symbol": symbol}).fetchone()
+        next_day = {"date": str(next_day_row[0]), "predicted_close": float(next_day_row[1])} if next_day_row else None
+
+        # Stats from last 30 completed days for this symbol
+        stats_row = conn.execute(text("""
+            WITH ranked AS (
+                SELECT date, real_close, predicted_close,
+                       LAG(real_close) OVER (ORDER BY date) AS prev_real_close,
+                       ROW_NUMBER() OVER (ORDER BY date DESC) AS rn
+                FROM predictions
+                WHERE real_close IS NOT NULL AND symbol = :symbol
+            ),
+            last30 AS (
+                SELECT * FROM ranked WHERE rn <= 30
+            )
+            SELECT
+                MAX(CASE WHEN rn = 1 THEN real_close END) AS last_real_close,
+                MAX(CASE WHEN rn = 1 THEN predicted_close END) AS last_pred_close,
+                AVG(ABS(real_close - predicted_close)) AS mae,
+                SQRT(AVG(POWER(real_close - predicted_close, 2))) AS rmse,
+                AVG(ABS(real_close - predicted_close) / NULLIF(real_close, 0)) * 100 AS mape,
+                AVG(CASE WHEN prev_real_close IS NOT NULL AND (
+                    (real_close - prev_real_close > 0 AND predicted_close - prev_real_close > 0) OR
+                    (real_close - prev_real_close < 0 AND predicted_close - prev_real_close < 0)
+                ) THEN 1.0 ELSE 0.0 END) * 100 AS correct_direction
+            FROM last30
+        """), {"symbol": symbol}).fetchone()
+
+    result = {
+        "symbol": symbol,
+        "next_pred_date": next_day["date"] if next_day else None,
+        "next_pred_value": next_day["predicted_close"] if next_day else None,
+        "last_real_close": round(float(stats_row[0]), 2) if stats_row and stats_row[0] is not None else None,
+        "last_pred_close": round(float(stats_row[1]), 2) if stats_row and stats_row[1] is not None else None,
+        "mae": round(float(stats_row[2]), 2) if stats_row and stats_row[2] is not None else None,
+        "rmse": round(float(stats_row[3]), 2) if stats_row and stats_row[3] is not None else None,
+        "mape": round(float(stats_row[4]), 2) if stats_row and stats_row[4] is not None else None,
+        "correct_direction": round(float(stats_row[5]), 2) if stats_row and stats_row[5] is not None else None,
+    }
+    return _json_response(result)
 
 @app.route("/robots.txt")
 def robots():
