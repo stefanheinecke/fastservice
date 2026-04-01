@@ -126,6 +126,31 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
                 df["date"] = pd.to_datetime(df["date"])
                 pred_data[sym] = df.set_index("date")
 
+    # 3b. Load the latest predicted_close per symbol (including forecasts)
+    #     so we can check if the model predicts UP for the next day.
+    latest_pred = {}  # sym -> {"last_real_close": float, "next_predicted": float}
+    with engine.connect() as conn:
+        for sym in smi_tickers:
+            # Latest real close
+            q_real = text("""
+                SELECT real_close FROM predictions
+                WHERE symbol = :sym AND real_close IS NOT NULL
+                ORDER BY date DESC LIMIT 1
+            """)
+            row_real = conn.execute(q_real, {"sym": sym}).fetchone()
+            # Latest prediction (may be a future forecast with no real_close yet)
+            q_pred = text("""
+                SELECT predicted_close FROM predictions
+                WHERE symbol = :sym
+                ORDER BY date DESC LIMIT 1
+            """)
+            row_pred = conn.execute(q_pred, {"sym": sym}).fetchone()
+            if row_real and row_pred:
+                latest_pred[sym] = {
+                    "last_real_close": float(row_real[0]),
+                    "next_predicted": float(row_pred[0]),
+                }
+
     # ------------------------------------------------------------------
     # 4. Build rebalance schedule based on chosen frequency
     # ------------------------------------------------------------------
@@ -170,12 +195,32 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
         return float((real_dir[valid] == pred_dir[valid]).mean() * 100)
 
     def _select_top5(as_of_date):
-        """Return list of (symbol, weight) for the top-5 portfolio."""
+        """Return list of (symbol, weight) for the top-5 portfolio.
+        Only considers stocks with high directional accuracy AND whose model
+        predicts the next day's close above the latest real close."""
         scores = []
         for sym in smi_tickers:
             acc = _direction_accuracy(sym, as_of_date)
-            if acc is not None:
-                scores.append((sym, acc))
+            if acc is None:
+                continue
+            # Check if the model's next-day prediction is UP:
+            # The row *after* as_of_date holds the prediction for the next day.
+            if sym not in pred_data:
+                continue
+            sym_df = pred_data[sym]
+            # Latest real close up to as_of_date
+            recent = sym_df.loc[sym_df.index <= as_of_date]
+            if recent.empty:
+                continue
+            last_real = recent["real_close"].iloc[-1]
+            # Next-day prediction: first row after as_of_date
+            future = sym_df.loc[sym_df.index > as_of_date]
+            if future.empty:
+                continue
+            next_pred = future["predicted_close"].iloc[0]
+            if next_pred <= last_real:
+                continue  # model predicts flat/down — skip
+            scores.append((sym, acc))
         scores.sort(key=lambda x: x[1], reverse=True)
 
         selected = []
