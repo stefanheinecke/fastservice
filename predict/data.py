@@ -196,30 +196,33 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
 
     def _select_top5(as_of_date):
         """Return list of (symbol, weight) for the top-5 portfolio.
-        Only considers stocks with high directional accuracy AND whose model
-        predicts the next day's close above the latest real close."""
+        Also returns all_accuracies dict and exclusion_reasons dict."""
+        all_accuracies = {}  # sym -> accuracy (float or None)
+        exclusion_reasons = {}  # sym -> reason string (only for non-selected)
         scores = []
         for sym in smi_tickers:
             acc = _direction_accuracy(sym, as_of_date)
+            all_accuracies[sym] = acc
             if acc is None:
+                exclusion_reasons[sym] = "Not enough prediction data (<10 days)"
                 continue
-            # Check if the model's next-day prediction is UP:
-            # The row *after* as_of_date holds the prediction for the next day.
             if sym not in pred_data:
+                exclusion_reasons[sym] = "No prediction data"
                 continue
             sym_df = pred_data[sym]
-            # Latest real close up to as_of_date
             recent = sym_df.loc[sym_df.index <= as_of_date]
             if recent.empty:
+                exclusion_reasons[sym] = "No price data up to selection date"
                 continue
             last_real = recent["real_close"].iloc[-1]
-            # Next-day prediction: first row after as_of_date
             future = sym_df.loc[sym_df.index > as_of_date]
             if future.empty:
+                exclusion_reasons[sym] = "No future prediction available"
                 continue
             next_pred = future["predicted_close"].iloc[0]
             if next_pred <= last_real:
-                continue  # model predicts flat/down — skip
+                exclusion_reasons[sym] = "Predicted DOWN (pred {:.2f} <= real {:.2f})".format(next_pred, last_real)
+                continue
             scores.append((sym, acc))
         scores.sort(key=lambda x: x[1], reverse=True)
 
@@ -228,21 +231,25 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
         for sym, acc in scores:
             sec = meta[sym]["sector"]
             if sector_count.get(sec, 0) >= MAX_PER_SECTOR:
+                exclusion_reasons[sym] = "Sector cap reached ({}, max {})".format(sec, MAX_PER_SECTOR)
                 continue
             selected.append(sym)
             sector_count[sec] = sector_count.get(sec, 0) + 1
             if len(selected) >= TOP_N:
+                # Mark remaining scored stocks as excluded by rank
+                for remaining_sym, _ in scores:
+                    if remaining_sym not in selected and remaining_sym not in exclusion_reasons:
+                        exclusion_reasons[remaining_sym] = "Lower accuracy rank (top {} filled)".format(TOP_N)
                 break
 
         if not selected:
-            return []
+            return [], all_accuracies, exclusion_reasons
 
-        # Market-cap weighting
         total_cap = sum(meta[s]["market_cap"] for s in selected)
         if total_cap == 0:
             w = 1.0 / len(selected)
-            return [(s, w) for s in selected]
-        return [(s, meta[s]["market_cap"] / total_cap) for s in selected]
+            return [(s, w) for s in selected], all_accuracies, exclusion_reasons
+        return [(s, meta[s]["market_cap"] / total_cap) for s in selected], all_accuracies, exclusion_reasons
 
     # ------------------------------------------------------------------
     # 6. Simulate daily returns, rebalancing only on rebalance dates
@@ -250,7 +257,8 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
     portfolio_value = 100.0
     smi_value = 100.0
     holdings = []  # current [(symbol, weight)]
-    current_accuracies = {}  # sym -> accuracy at last rebalance
+    current_accuracies = {}  # sym -> accuracy at last rebalance (all stocks)
+    current_exclusion_reasons = {}  # sym -> reason string
 
     series_dates = []
     series_portfolio = []
@@ -264,18 +272,17 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
         # --- Rebalance if this day is a rebalance date ---
         is_rebal = day in rebal_set
         if is_rebal:
-            # Use prev_day (or day before first trading day) to avoid look-ahead bias:
-            # selection must be based on information available *before* this day.
             selection_date = prev_day if prev_day is not None else day - pd.Timedelta(days=1)
-            holdings = _select_top5(selection_date)
-            current_accuracies = {}
+            holdings, all_acc, excl_reasons = _select_top5(selection_date)
+            current_accuracies = {sym: (round(a, 2) if a is not None else None)
+                                  for sym, a in all_acc.items()}
+            current_exclusion_reasons = excl_reasons
             comp_entry = {
                 "date": str(day.date()),
                 "holdings": [],
             }
             for sym, wt in holdings:
-                acc = round(_direction_accuracy(sym, selection_date) or 0, 2)
-                current_accuracies[sym] = acc
+                acc = current_accuracies.get(sym) or 0
                 comp_entry["holdings"].append({
                     "symbol": sym,
                     "name": meta[sym]["name"],
@@ -335,6 +342,7 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
                 "in_portfolio": in_portfolio,
                 "weight_pct": round(held_weights.get(sym, 0) * 100, 2),
                 "direction_accuracy": current_accuracies.get(sym),
+                "exclusion_reason": current_exclusion_reasons.get(sym, "") if not in_portfolio else "",
                 "predicted_close": predicted_close,
                 "real_close": real_close,
                 "market_close": market_price,

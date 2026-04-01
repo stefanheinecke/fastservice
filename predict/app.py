@@ -245,18 +245,18 @@ def api_robo_index_report():
             ws1.cell(row=row, column=5).number_format = pct_fmt
 
             # F: Sum Weighted Returns — SUMPRODUCT from Holdings Detail
-            # Holdings Detail columns: F=Weight%, N=Daily Stock Return, G=In Portfolio
+            # Holdings Detail columns: F=Weight%, O=Daily Stock Return, G=In Portfolio
             # We want: SUMPRODUCT((In_Portfolio="Yes") * Weight/100 * DailyReturn)
             if i == 0:
                 ws1.cell(row=row, column=6, value=0)
             else:
                 hd_start = 2 + i * n_stocks
                 hd_end = 1 + (i + 1) * n_stocks
-                # Col G = In Portfolio, Col F = Weight%, Col N = Daily Stock Return
+                # Col G = In Portfolio, Col F = Weight%, Col O = Daily Stock Return
                 ws1.cell(row=row, column=6).value = (
                     f"=SUMPRODUCT(('Holdings Detail'!G{hd_start}:G{hd_end}=\"Yes\")*"
                     f"'Holdings Detail'!F{hd_start}:F{hd_end}/100*"
-                    f"'Holdings Detail'!N{hd_start}:N{hd_end})"
+                    f"'Holdings Detail'!O{hd_start}:O{hd_end})"
                 )
             ws1.cell(row=row, column=6).number_format = pct_fmt
 
@@ -304,7 +304,7 @@ def api_robo_index_report():
         headers2 = [
             "Date", "Symbol", "Name", "Sector",
             "Rebalance?", "Weight %",
-            "In Portfolio",
+            "In Portfolio", "Exclusion Reason",
             "Dir. Accuracy %",
             "Predicted Close", "Real Close", "Market Close",
             "Pred vs Real Diff", "Pred Direction",
@@ -326,34 +326,40 @@ def api_robo_index_report():
             ws2.cell(row=row, column=5, value="Yes" if d["is_rebalance_day"] else "")
             ws2.cell(row=row, column=6, value=d["weight_pct"])
             ws2.cell(row=row, column=6).number_format = '0.00'
-            # In Portfolio — shows YES for selected stocks
+            # G: In Portfolio
             ws2.cell(row=row, column=7, value="Yes" if in_port else "")
-            ws2.cell(row=row, column=8, value=d["direction_accuracy"])
-            ws2.cell(row=row, column=8).number_format = '0.00'
-            ws2.cell(row=row, column=9, value=d["predicted_close"])
-            ws2.cell(row=row, column=9).number_format = num_fmt
-            ws2.cell(row=row, column=10, value=d["real_close"])
+            # H: Exclusion Reason (blank for in-portfolio stocks)
+            ws2.cell(row=row, column=8, value=d.get("exclusion_reason", ""))
+            # I: Dir. Accuracy %
+            ws2.cell(row=row, column=9, value=d["direction_accuracy"])
+            ws2.cell(row=row, column=9).number_format = '0.00'
+            # J: Predicted Close
+            ws2.cell(row=row, column=10, value=d["predicted_close"])
             ws2.cell(row=row, column=10).number_format = num_fmt
-            ws2.cell(row=row, column=11, value=d["market_close"])
+            # K: Real Close
+            ws2.cell(row=row, column=11, value=d["real_close"])
             ws2.cell(row=row, column=11).number_format = num_fmt
-            # L: Pred vs Real Diff = Predicted - Real
-            ws2.cell(row=row, column=12).value = f'=IF(AND(I{row}<>"",J{row}<>""),I{row}-J{row},"")'
+            # L: Market Close
+            ws2.cell(row=row, column=12, value=d["market_close"])
             ws2.cell(row=row, column=12).number_format = num_fmt
-            # M: Pred Direction: UP if predicted > real close
-            ws2.cell(row=row, column=13).value = f'=IF(I{row}<>"",IF(I{row}>J{row},"UP","DOWN"),"")'
-            # N: Daily Stock Return = market_close_today / market_close_prev_day - 1
+            # M: Pred vs Real Diff = Predicted - Real
+            ws2.cell(row=row, column=13).value = f'=IF(AND(J{row}<>"",K{row}<>""),J{row}-K{row},"")'
+            ws2.cell(row=row, column=13).number_format = num_fmt
+            # N: Pred Direction: UP if predicted > real close
+            ws2.cell(row=row, column=14).value = f'=IF(J{row}<>"",IF(J{row}>K{row},"UP","DOWN"),"")'
+            # O: Daily Stock Return = market_close_today / market_close_prev_day - 1
             if sym in prev_row_map:
                 pr = prev_row_map[sym]
-                ws2.cell(row=row, column=14).value = f'=IF(AND(K{row}<>"",K{pr}<>""),K{row}/K{pr}-1,"")'
-                ws2.cell(row=row, column=14).number_format = pct_fmt
-                # O: Weighted Return = IF in portfolio, weight/100 * daily return
-                ws2.cell(row=row, column=15).value = (
-                    f'=IF(AND(G{row}="Yes",N{row}<>""),F{row}/100*N{row},"")'
-                )
+                ws2.cell(row=row, column=15).value = f'=IF(AND(L{row}<>"",L{pr}<>""),L{row}/L{pr}-1,"")'
                 ws2.cell(row=row, column=15).number_format = pct_fmt
+                # P: Weighted Return = IF in portfolio, weight/100 * daily return
+                ws2.cell(row=row, column=16).value = (
+                    f'=IF(AND(G{row}="Yes",O{row}<>""),F{row}/100*O{row},"")'
+                )
+                ws2.cell(row=row, column=16).number_format = pct_fmt
             else:
-                ws2.cell(row=row, column=14, value="")
                 ws2.cell(row=row, column=15, value="")
+                ws2.cell(row=row, column=16, value="")
 
             # Highlight selected stocks in green, rebalance days in yellow
             if in_port:
