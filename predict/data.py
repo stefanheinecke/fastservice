@@ -44,6 +44,22 @@ def load_data(symbol: str):
     return df.dropna()
 
 
+_symbol_name_cache = {}
+
+def get_symbol_name(symbol):
+    """Return a human-readable name for a Yahoo Finance ticker symbol.
+    Results are cached in-memory so yfinance is called at most once per symbol."""
+    if symbol in _symbol_name_cache:
+        return _symbol_name_cache[symbol]
+    try:
+        info = yf.Ticker(symbol).info
+        name = info.get("shortName") or info.get("longName") or symbol
+    except Exception:
+        name = symbol
+    _symbol_name_cache[symbol] = name
+    return name
+
+
 class Predictor:
     def _ensure_table(self):
         """Create the predictions and prediction_stats tables if they don't exist."""

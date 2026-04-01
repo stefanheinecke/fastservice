@@ -6,7 +6,7 @@ import datetime
 import numpy as np
 import pandas as pd
 from flask import Flask, render_template, send_file, Response, request
-from data import Predictor
+from data import Predictor, get_symbol_name
 from sqlalchemy import create_engine, text
 
 app = Flask(__name__)
@@ -54,6 +54,7 @@ def api_summary_predictions():
                 last_pred_close = round(float(df.iloc[0]["Predicted_Close"]), 2) if not df.empty and pd.notna(df.iloc[0]["Predicted_Close"]) else None
                 results.append({
                     "symbol": symbol,
+                    "name": get_symbol_name(symbol),
                     "next_pred_date": next_pred_date,
                     "next_pred_value": next_pred_value,
                     "last_real_close": last_real_close,
@@ -93,6 +94,8 @@ def api_data_summary():
     with engine.connect() as conn:
         df = pd.read_sql(query, conn)
     rows = json.loads(df.to_json(orient="records", date_format="iso"))
+    for row in rows:
+        row["name"] = get_symbol_name(row["symbol"]) if row.get("symbol") else None
     return _json_response(rows)
 
 
