@@ -134,10 +134,44 @@ def api_robo_index():
         rebal = "3M"
     try:
         result = robo_index_backtest(DATABASE_URL, SMI_TICKERS, lookback_weeks=weeks, rebal_freq=rebal)
-        return _json_response(result)
+        # Strip daily_detail from JSON response (only used for CSV download)
+        json_result = {k: v for k, v in result.items() if k != "daily_detail"}
+        return _json_response(json_result)
     except Exception as e:
         import traceback
         print(f"Error in /api/robo-index: {e}\n{traceback.format_exc()}")
+        return _json_response({"error": str(e)}), 500
+
+
+@app.route("/api/robo-index/csv")
+def api_robo_index_csv():
+    """Run the Robo-Index backtest and return a detailed CSV report."""
+    weeks = request.args.get("weeks", default=52, type=int)
+    weeks = min(max(weeks, 4), 156)
+    rebal = request.args.get("rebal", default="3M", type=str)
+    if rebal not in ("D", "W", "M", "3M"):
+        rebal = "3M"
+    try:
+        result = robo_index_backtest(DATABASE_URL, SMI_TICKERS, lookback_weeks=weeks, rebal_freq=rebal)
+        if "error" in result:
+            return _json_response({"error": result["error"]}), 400
+        detail = result.get("daily_detail", [])
+        df = pd.DataFrame(detail)
+        if df.empty:
+            return _json_response({"error": "No data for CSV"}), 400
+        col_order = [
+            "date", "is_rebalance_day", "symbol", "name", "sector",
+            "weight_pct", "direction_accuracy",
+            "predicted_close", "real_close", "market_close",
+            "portfolio_value", "smi_value",
+        ]
+        df = df[[c for c in col_order if c in df.columns]]
+        buf = io.BytesIO(df.to_csv(index=False).encode("utf-8"))
+        filename = f"robo_index_report_{rebal}_{weeks}w_{datetime.date.today()}.csv"
+        return send_file(buf, mimetype="text/csv", as_attachment=True, download_name=filename)
+    except Exception as e:
+        import traceback
+        print(f"Error in /api/robo-index/csv: {e}\n{traceback.format_exc()}")
         return _json_response({"error": str(e)}), 500
 
 

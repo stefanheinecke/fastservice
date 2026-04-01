@@ -250,31 +250,38 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
     portfolio_value = 100.0
     smi_value = 100.0
     holdings = []  # current [(symbol, weight)]
+    current_accuracies = {}  # sym -> accuracy at last rebalance
 
     series_dates = []
     series_portfolio = []
     series_smi = []
     compositions = []  # [{date, holdings: [{symbol,name,sector,weight,accuracy}]}]
+    daily_detail = []  # per-day, per-stock rows for CSV report
 
     prev_day = None
+    is_rebal = False
     for day in trading_days:
         # --- Rebalance if this day is a rebalance date ---
-        if day in rebal_set:
+        is_rebal = day in rebal_set
+        if is_rebal:
             # Use prev_day (or day before first trading day) to avoid look-ahead bias:
             # selection must be based on information available *before* this day.
             selection_date = prev_day if prev_day is not None else day - pd.Timedelta(days=1)
             holdings = _select_top5(selection_date)
+            current_accuracies = {}
             comp_entry = {
                 "date": str(day.date()),
                 "holdings": [],
             }
             for sym, wt in holdings:
+                acc = round(_direction_accuracy(sym, selection_date) or 0, 2)
+                current_accuracies[sym] = acc
                 comp_entry["holdings"].append({
                     "symbol": sym,
                     "name": meta[sym]["name"],
                     "sector": meta[sym]["sector"],
                     "weight": round(wt * 100, 2),
-                    "accuracy": round(_direction_accuracy(sym, selection_date) or 0, 2),
+                    "accuracy": acc,
                 })
             compositions.append(comp_entry)
 
@@ -301,6 +308,37 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
         series_dates.append(str(day.date()))
         series_portfolio.append(round(portfolio_value, 4))
         series_smi.append(round(smi_value, 4))
+
+        # --- Collect daily detail for CSV report ---
+        for sym, wt in holdings:
+            real_close = None
+            predicted_close = None
+            if sym in pred_data:
+                sym_df = pred_data[sym]
+                row = sym_df.loc[sym_df.index == day]
+                if not row.empty:
+                    real_close = float(row["real_close"].iloc[0])
+                    predicted_close = float(row["predicted_close"].iloc[0])
+            market_price = None
+            if sym in prices.columns:
+                p = prices.loc[prices.index <= day, sym].dropna()
+                if not p.empty:
+                    market_price = round(float(p.iloc[-1]), 2)
+            daily_detail.append({
+                "date": str(day.date()),
+                "symbol": sym,
+                "name": meta[sym]["name"],
+                "sector": meta[sym]["sector"],
+                "weight_pct": round(wt * 100, 2),
+                "direction_accuracy": current_accuracies.get(sym),
+                "predicted_close": predicted_close,
+                "real_close": real_close,
+                "market_close": market_price,
+                "is_rebalance_day": is_rebal,
+                "portfolio_value": round(portfolio_value, 4),
+                "smi_value": round(smi_value, 4),
+            })
+
         prev_day = day
 
     # ------------------------------------------------------------------
@@ -333,6 +371,7 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
         "portfolio": series_portfolio,
         "smi": series_smi,
         "compositions": compositions,
+        "daily_detail": daily_detail,
         "portfolio_stats": _stats(port_arr, "Robo-Index"),
         "smi_stats": _stats(smi_arr, "SMI"),
         "meta": {s: {"name": m["name"], "sector": m["sector"]} for s, m in meta.items()},
