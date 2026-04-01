@@ -128,21 +128,7 @@ class Predictor:
         """
         Calculate and store stats for the latest window_size days using fetch_prediction_history.
         """
-        df, correct_direction_perc, mae, rmse, mape, close_correct = self.fetch_prediction_history(limit=window_size)
-        stats = {
-            "correct_direction": correct_direction_perc,
-            "close_correct": close_correct,
-            "mae": mae,
-            "rmse": rmse,
-            "mape": mape,
-        }
-        self.store_prediction_stats(stats, stat_date=stat_date, window_size=window_size)
-
-    def store_latest_stats(self, window_size=30, stat_date=None):
-        """
-        Calculate and store stats for the latest window_size days using fetch_prediction_history.
-        """
-        df, correct_direction_perc, mae, rmse, mape, close_correct = self.fetch_prediction_history(limit=window_size)
+        df, correct_direction_perc, mae, rmse, mape, close_correct, mae_pct, rmse_pct = self.fetch_prediction_history(limit=window_size)
         stats = {
             "correct_direction": correct_direction_perc,
             "close_correct": close_correct,
@@ -348,7 +334,10 @@ class Predictor:
         mae = float(np.mean(np.abs(valid["Real_Close"] - valid["Predicted_Close"]))) if len(valid) > 0 else 0
         rmse = float(np.sqrt(np.mean((valid["Real_Close"] - valid["Predicted_Close"]) ** 2))) if len(valid) > 0 else 0
         mape = float(np.mean(np.abs((valid["Real_Close"] - valid["Predicted_Close"]) / valid["Real_Close"])) * 100) if len(valid) > 0 else 0
-        return df, correct_direction_perc, mae, rmse, mape, close_correct
+        mean_price = float(valid["Real_Close"].mean()) if len(valid) > 0 else 0
+        mae_pct = (mae / mean_price * 100) if mean_price > 0 else 0
+        rmse_pct = (rmse / mean_price * 100) if mean_price > 0 else 0
+        return df, correct_direction_perc, mae, rmse, mape, close_correct, mae_pct, rmse_pct
 
     def fetch_next_day_forecast(self):
         """Return the most recent prediction that has no real_close yet (i.e. future)."""

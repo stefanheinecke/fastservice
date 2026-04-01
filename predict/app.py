@@ -42,7 +42,7 @@ def api_summary_predictions():
         for symbol in symbols:
             try:
                 predictor = _get_predictor(symbol)
-                df, correct_direction_perc, mae, rmse, mape, close_correct = predictor.fetch_prediction_history()
+                df, correct_direction_perc, mae, rmse, mape, close_correct, mae_pct, rmse_pct = predictor.fetch_prediction_history()
                 forecast = predictor.fetch_next_day_forecast()
                 next_pred_date = None
                 next_pred_value = None
@@ -50,15 +50,19 @@ def api_summary_predictions():
                     next_pred_date = forecast.get("date")
                     next_pred_value = forecast.get("predicted_close")
                 last_real_close = round(float(df.iloc[0]["Real_Close"]), 2) if not df.empty and pd.notna(df.iloc[0]["Real_Close"]) else None
+                last_real_close_date = str(df.iloc[0]["Date"]) if not df.empty else None
                 last_pred_close = round(float(df.iloc[0]["Predicted_Close"]), 2) if not df.empty and pd.notna(df.iloc[0]["Predicted_Close"]) else None
                 results.append({
                     "symbol": symbol,
                     "next_pred_date": next_pred_date,
                     "next_pred_value": next_pred_value,
                     "last_real_close": last_real_close,
+                    "last_real_close_date": last_real_close_date,
                     "last_pred_close": last_pred_close,
                     "mae": round(mae, 2) if mae is not None else None,
+                    "mae_pct": round(mae_pct, 2) if mae_pct is not None else None,
                     "rmse": round(rmse, 2) if rmse is not None else None,
+                    "rmse_pct": round(rmse_pct, 2) if rmse_pct is not None else None,
                     "mape": round(mape, 2) if mape is not None else None,
                     "correct_direction": round(correct_direction_perc, 2) if correct_direction_perc is not None else None,
                     "close_correct": round(close_correct, 2) if close_correct is not None else None,
@@ -99,7 +103,7 @@ def api_predictions():
     start = request.args.get("start", default=None, type=str)
     end = request.args.get("end", default=None, type=str)
     predictor = _get_predictor(symbol)
-    df, correct_direction_perc, mae, rmse, mape, close_correct = predictor.fetch_prediction_history(
+    df, correct_direction_perc, mae, rmse, mape, close_correct, mae_pct, rmse_pct = predictor.fetch_prediction_history(
         limit=days, start_date=start, end_date=end
     )
     df["Date"] = df["Date"].astype(str)
@@ -109,7 +113,9 @@ def api_predictions():
     return _json_response({
         "correct_direction_pct": round(correct_direction_perc, 2),
         "mae": round(mae, 2),
+        "mae_pct": round(mae_pct, 2),
         "rmse": round(rmse, 2),
+        "rmse_pct": round(rmse_pct, 2),
         "mape": round(mape, 2),
         "close_correct": round(close_correct, 2),
         "rows": rows,

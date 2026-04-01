@@ -160,12 +160,12 @@
             <thead>
               <tr>
                 <th>Ticker</th>
-                <th>Last Real Close</th>
+                <th id="last-real-close-header">Last Real Close</th>
                 <th>Next-Day Prediction</th>
                 <th>Correct Direction (%)</th>
-                <th>MAE</th>
-                <th>RMSE</th>
-                <th>MAPE</th>
+                <th>MAE (%)</th>
+                <th>RMSE (%)</th>
+                <th>MAPE (%)</th>
               </tr>
             </thead>
             <tbody id="summary-predictions-body"></tbody>
@@ -304,11 +304,11 @@
           <div class="value" id="close-correct-pct"></div>
         </div>
         <div class="metric-card">
-          <div class="label">MAE</div>
+          <div class="label">MAE (%)</div>
           <div class="value" id="mae"></div>
         </div>
         <div class="metric-card">
-          <div class="label">RMSE</div>
+          <div class="label">RMSE (%)</div>
           <div class="value" id="rmse"></div>
         </div>
         <div class="metric-card">
@@ -322,8 +322,8 @@
         <div style="margin-top:1rem; color:var(--muted); font-size:.88rem; line-height:1.7">
           <p><strong style="color:var(--text)">Correct Direction</strong> &mdash; The percentage of days where the model correctly predicted whether the price would go up or down. Higher is better.</p>
           <p style="margin-top:.6rem"><strong style="color:var(--text)">Close &amp; Correct</strong> &mdash; The percentage of days where the model got the direction right AND the predicted price was within 5% of the actual price. This is a stricter metric that rewards both accuracy and proximity. Higher is better.</p>
-          <p style="margin-top:.6rem"><strong style="color:var(--text)">MAE (Mean Absolute Error)</strong> &mdash; The average absolute difference between predicted and actual prices. A MAE of $5 means the prediction is off by $5 on average. Lower is better.</p>
-          <p style="margin-top:.6rem"><strong style="color:var(--text)">RMSE (Root Mean Squared Error)</strong> &mdash; Like MAE but penalises large errors more heavily. Expressed in dollars, it gives a sense of typical error magnitude. Lower is better.</p>
+          <p style="margin-top:.6rem"><strong style="color:var(--text)">MAE % (Mean Absolute Error %)</strong> &mdash; The average absolute difference between predicted and actual prices, expressed as a percentage of the mean price. Lower is better.</p>
+          <p style="margin-top:.6rem"><strong style="color:var(--text)">RMSE % (Root Mean Squared Error %)</strong> &mdash; Like MAE but penalises large errors more heavily, expressed as a percentage of the mean price. Lower is better.</p>
           <p style="margin-top:.6rem"><strong style="color:var(--text)">MAPE (Mean Absolute Percentage Error)</strong> &mdash; The average prediction error expressed as a percentage of the actual price. A MAPE of 2% means the model is typically off by 2% of the real price. Lower is better.</p>
         </div>
       </details>
@@ -706,19 +706,53 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       } else {
         heading.textContent = 'Summary of Next-Day Predictions';
       }
+      // Update header with the latest real close date across all symbols
+      let latestRealCloseDate = null;
+      data.forEach(row => {
+        if (row.last_real_close_date) {
+          if (!latestRealCloseDate || row.last_real_close_date > latestRealCloseDate) latestRealCloseDate = row.last_real_close_date;
+        }
+      });
+      const closeHeader = document.getElementById("last-real-close-header");
+      closeHeader.textContent = latestRealCloseDate ? `Last Real Close (${latestRealCloseDate})` : "Last Real Close";
+
       if (!Array.isArray(data) || data.length === 0) {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted)">No summary data available.</td></tr>';
       } else {
+        // Sort by correct_direction descending (nulls last)
+        data.sort((a, b) => {
+          const av = a.correct_direction != null ? a.correct_direction : -Infinity;
+          const bv = b.correct_direction != null ? b.correct_direction : -Infinity;
+          return bv - av;
+        });
+
+        // Color helpers
+        function dirColor(v) {
+          if (v == null) return "";
+          if (v >= 60) return "color:#22c55e; font-weight:600";  // strong green
+          if (v >= 50) return "color:#86efac";                     // light green
+          if (v >= 40) return "color:#fbbf24";                     // amber
+          return "color:#ef4444; font-weight:600";                 // red
+        }
+        function pctStatColor(v) {
+          // Color for percentage-based stats (MAE%, RMSE%, MAPE%) — lower is better
+          if (v == null) return "";
+          if (v <= 2) return "color:#22c55e; font-weight:600";   // strong green
+          if (v <= 5) return "color:#86efac";                     // light green
+          if (v <= 10) return "color:#fbbf24";                    // amber
+          return "color:#ef4444; font-weight:600";                // red
+        }
+
         data.forEach(row => {
           const tr = document.createElement("tr");
           tr.innerHTML =
             `<td>${row.symbol || "&mdash;"}</td>` +
             `<td>${row.last_real_close != null ? Number(row.last_real_close).toFixed(2) : "&mdash;"}</td>` +
             `<td>${row.next_pred_value != null ? Number(row.next_pred_value).toFixed(2) : "&mdash;"}</td>` +
-            `<td>${row.correct_direction != null ? row.correct_direction.toFixed(2) + "%" : "&mdash;"}</td>` +
-            `<td>${row.mae != null ? "$" + row.mae.toFixed(2) : "&mdash;"}</td>` +
-            `<td>${row.rmse != null ? "$" + row.rmse.toFixed(2) : "&mdash;"}</td>` +
-            `<td>${row.mape != null ? row.mape.toFixed(2) + "%" : "&mdash;"}</td>`;
+            `<td style="${dirColor(row.correct_direction)}">${row.correct_direction != null ? row.correct_direction.toFixed(2) + "%" : "&mdash;"}</td>` +
+            `<td style="${pctStatColor(row.mae_pct)}">${row.mae_pct != null ? row.mae_pct.toFixed(2) + "%" : "&mdash;"}</td>` +
+            `<td style="${pctStatColor(row.rmse_pct)}">${row.rmse_pct != null ? row.rmse_pct.toFixed(2) + "%" : "&mdash;"}</td>` +
+            `<td style="${pctStatColor(row.mape)}">${row.mape != null ? row.mape.toFixed(2) + "%" : "&mdash;"}</td>`;
           tbody.appendChild(tr);
         });
       }
@@ -996,7 +1030,7 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
 
     // Recalculate metrics for the visible window
     let correctCount = 0, closeCorrectCount = 0, totalDir = 0;
-    let absErrorSum = 0, sqErrorSum = 0, pctErrorSum = 0, errCount = 0;
+    let absErrorSum = 0, sqErrorSum = 0, pctErrorSum = 0, realCloseSum = 0, errCount = 0;
     rows.forEach(r => {
       const dir = r.Correct_Direction;
       if (dir === true || dir === 1 || dir === false || dir === 0) {
@@ -1010,19 +1044,23 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
         absErrorSum += Math.abs(diff);
         sqErrorSum  += diff * diff;
         pctErrorSum += Math.abs(diff / r.Real_Close);
+        realCloseSum += r.Real_Close;
         errCount++;
       }
     });
     const dirPct = totalDir > 0 ? (correctCount / totalDir * 100).toFixed(2) : "\u2014";
     const ccPct  = totalDir > 0 ? (closeCorrectCount / totalDir * 100).toFixed(2) : "\u2014";
-    const mae    = errCount > 0 ? (absErrorSum / errCount).toFixed(2) : "\u2014";
-    const rmse   = errCount > 0 ? Math.sqrt(sqErrorSum / errCount).toFixed(2) : "\u2014";
+    const meanPrice = errCount > 0 ? realCloseSum / errCount : 0;
+    const maeAbs = errCount > 0 ? absErrorSum / errCount : 0;
+    const rmseAbs = errCount > 0 ? Math.sqrt(sqErrorSum / errCount) : 0;
+    const maePct = meanPrice > 0 ? (maeAbs / meanPrice * 100).toFixed(2) : "\u2014";
+    const rmsePct = meanPrice > 0 ? (rmseAbs / meanPrice * 100).toFixed(2) : "\u2014";
     const mape   = errCount > 0 ? (pctErrorSum / errCount * 100).toFixed(2) : "\u2014";
 
     document.getElementById("dir-pct").textContent = dirPct + (dirPct !== "\u2014" ? "%" : "");
     document.getElementById("close-correct-pct").textContent = ccPct + (ccPct !== "\u2014" ? "%" : "");
-    document.getElementById("mae").textContent     = mae  !== "\u2014" ? "$" + mae  : "\u2014";
-    document.getElementById("rmse").textContent    = rmse !== "\u2014" ? "$" + rmse : "\u2014";
+    document.getElementById("mae").textContent     = maePct  !== "\u2014" ? maePct + "%"  : "\u2014";
+    document.getElementById("rmse").textContent    = rmsePct !== "\u2014" ? rmsePct + "%" : "\u2014";
     document.getElementById("mape").textContent    = mape !== "\u2014" ? mape + "%" : "\u2014";
 
     // Chart
