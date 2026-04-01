@@ -734,13 +734,26 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
           if (v >= 40) return "color:#fbbf24";                     // amber
           return "color:#ef4444; font-weight:600";                 // red
         }
-        function pctStatColor(v) {
-          // Color for percentage-based stats (MAE%, RMSE%, MAPE%) — lower is better
+        function maeColor(v) {
           if (v == null) return "";
-          if (v <= 2) return "color:#22c55e; font-weight:600";   // strong green
-          if (v <= 5) return "color:#86efac";                     // light green
-          if (v <= 10) return "color:#fbbf24";                    // amber
+          if (v < 1)  return "color:#22c55e; font-weight:600";   // strong green
+          if (v <= 3)  return "color:#86efac";                    // light green
+          if (v <= 5)  return "color:#fbbf24";                    // amber
           return "color:#ef4444; font-weight:600";                // red
+        }
+        function rmseColor(v) {
+          if (v == null) return "";
+          if (v < 1.5) return "color:#22c55e; font-weight:600";
+          if (v <= 4)   return "color:#86efac";
+          if (v <= 6)   return "color:#fbbf24";
+          return "color:#ef4444; font-weight:600";
+        }
+        function mapeColor(v) {
+          if (v == null) return "";
+          if (v < 5)   return "color:#22c55e; font-weight:600";
+          if (v <= 10)  return "color:#86efac";
+          if (v <= 20)  return "color:#fbbf24";
+          return "color:#ef4444; font-weight:600";
         }
 
         data.forEach(row => {
@@ -750,9 +763,9 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
             `<td>${row.last_real_close != null ? Number(row.last_real_close).toFixed(2) : "&mdash;"}</td>` +
             `<td>${row.next_pred_value != null ? Number(row.next_pred_value).toFixed(2) : "&mdash;"}</td>` +
             `<td style="${dirColor(row.correct_direction)}">${row.correct_direction != null ? row.correct_direction.toFixed(2) + "%" : "&mdash;"}</td>` +
-            `<td style="${pctStatColor(row.mae_pct)}">${row.mae_pct != null ? row.mae_pct.toFixed(2) + "%" : "&mdash;"}</td>` +
-            `<td style="${pctStatColor(row.rmse_pct)}">${row.rmse_pct != null ? row.rmse_pct.toFixed(2) + "%" : "&mdash;"}</td>` +
-            `<td style="${pctStatColor(row.mape)}">${row.mape != null ? row.mape.toFixed(2) + "%" : "&mdash;"}</td>`;
+            `<td style="${maeColor(row.mae_pct)}">${row.mae_pct != null ? row.mae_pct.toFixed(2) + "%" : "&mdash;"}</td>` +
+            `<td style="${rmseColor(row.rmse_pct)}">${row.rmse_pct != null ? row.rmse_pct.toFixed(2) + "%" : "&mdash;"}</td>` +
+            `<td style="${mapeColor(row.mape)}">${row.mape != null ? row.mape.toFixed(2) + "%" : "&mdash;"}</td>`;
           tbody.appendChild(tr);
         });
       }
