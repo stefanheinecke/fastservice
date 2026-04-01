@@ -46,13 +46,17 @@ def api_summary_predictions():
                 forecast = predictor.fetch_next_day_forecast()
                 next_pred_date = None
                 next_pred_value = None
-                if not forecast.empty:
-                    next_pred_date = str(forecast.iloc[0]["Date"])
-                    next_pred_value = float(forecast.iloc[0]["Predicted_Close"])
+                if forecast:
+                    next_pred_date = forecast.get("date")
+                    next_pred_value = forecast.get("predicted_close")
+                last_real_close = round(float(df.iloc[0]["Real_Close"]), 2) if not df.empty and pd.notna(df.iloc[0]["Real_Close"]) else None
+                last_pred_close = round(float(df.iloc[0]["Predicted_Close"]), 2) if not df.empty and pd.notna(df.iloc[0]["Predicted_Close"]) else None
                 results.append({
                     "symbol": symbol,
                     "next_pred_date": next_pred_date,
                     "next_pred_value": next_pred_value,
+                    "last_real_close": last_real_close,
+                    "last_pred_close": last_pred_close,
                     "mae": round(mae, 2) if mae is not None else None,
                     "rmse": round(rmse, 2) if rmse is not None else None,
                     "mape": round(mape, 2) if mape is not None else None,
@@ -95,7 +99,7 @@ def api_predictions():
     start = request.args.get("start", default=None, type=str)
     end = request.args.get("end", default=None, type=str)
     predictor = _get_predictor(symbol)
-    df, correct_direction_perc, mae = predictor.fetch_prediction_history(
+    df, correct_direction_perc, mae, rmse, mape, close_correct = predictor.fetch_prediction_history(
         limit=days, start_date=start, end_date=end
     )
     df["Date"] = df["Date"].astype(str)
@@ -105,6 +109,9 @@ def api_predictions():
     return _json_response({
         "correct_direction_pct": round(correct_direction_perc, 2),
         "mae": round(mae, 2),
+        "rmse": round(rmse, 2),
+        "mape": round(mape, 2),
+        "close_correct": round(close_correct, 2),
         "rows": rows,
         "next_day": forecast,
     })
@@ -113,7 +120,7 @@ def api_predictions():
 @app.route("/api/download")
 def download_csv():
     predictor = _get_predictor()
-    df, _, _ = predictor.fetch_prediction_history()
+    df, *_ = predictor.fetch_prediction_history()
     buf = io.BytesIO(df.to_csv(index=False).encode("utf-8"))
     filename = f"gold_prediction_report_{datetime.date.today()}.csv"
     return send_file(buf, mimetype="text/csv", as_attachment=True,
