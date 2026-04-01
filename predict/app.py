@@ -129,8 +129,11 @@ def api_robo_index():
     """Run the Robo-Index backtest and return results."""
     weeks = request.args.get("weeks", default=52, type=int)
     weeks = min(max(weeks, 4), 156)  # clamp 4–156 weeks
+    rebal = request.args.get("rebal", default="3M", type=str)
+    if rebal not in ("D", "W", "M", "3M"):
+        rebal = "3M"
     try:
-        result = robo_index_backtest(DATABASE_URL, SMI_TICKERS, lookback_weeks=weeks)
+        result = robo_index_backtest(DATABASE_URL, SMI_TICKERS, lookback_weeks=weeks, rebal_freq=rebal)
         return _json_response(result)
     except Exception as e:
         import traceback

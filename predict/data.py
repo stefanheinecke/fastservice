@@ -72,10 +72,13 @@ def _get_ticker_info(symbol):
     return _ticker_info_cache[symbol]
 
 
-def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52):
+def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq="3M"):
     """
-    Backtest a weekly-rebalanced top-5 portfolio based on prediction accuracy,
+    Backtest a top-5 portfolio based on prediction accuracy,
     sector-diversified, market-cap weighted, compared against the SMI index.
+
+    rebal_freq: rebalancing frequency — "D" (daily), "W" (weekly),
+                "M" (monthly), "3M" (quarterly, default)
 
     Returns a dict with portfolio time series, SMI time series, composition
     history, and summary statistics.
@@ -124,14 +127,20 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52):
                 pred_data[sym] = df.set_index("date")
 
     # ------------------------------------------------------------------
-    # 4. Build weekly rebalance schedule
+    # 4. Build rebalance schedule based on chosen frequency
     # ------------------------------------------------------------------
-    # Use Fridays from the price index
-    weekly_dates = prices.resample("W-FRI").last().dropna(how="all").index
-    # Keep only last `lookback_weeks` weeks
-    weekly_dates = weekly_dates[-lookback_weeks:] if len(weekly_dates) > lookback_weeks else weekly_dates
+    RESAMPLE_MAP = {"D": "B", "W": "W-FRI", "M": "ME", "3M": "QE"}
+    rule = RESAMPLE_MAP.get(rebal_freq, "QE")
+    if rule == "B":
+        # Business-day: just use every trading day in the price index
+        rebal_dates = prices.index
+    else:
+        rebal_dates = prices.resample(rule).last().dropna(how="all").index
+    # Keep only the lookback window
+    cutoff = pd.Timestamp.today().normalize() - pd.DateOffset(weeks=lookback_weeks)
+    rebal_dates = rebal_dates[rebal_dates >= cutoff]
 
-    if len(weekly_dates) < 2:
+    if len(rebal_dates) < 2:
         return {"error": "Not enough data for backtest"}
 
     # ------------------------------------------------------------------
@@ -188,7 +197,7 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52):
         return [(s, meta[s]["market_cap"] / total_cap) for s in selected]
 
     # ------------------------------------------------------------------
-    # 6. Simulate week-by-week returns
+    # 6. Simulate period-by-period returns
     # ------------------------------------------------------------------
     portfolio_value = 100.0
     smi_value = 100.0
@@ -198,9 +207,9 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52):
     series_smi = []
     compositions = []  # [{date, holdings: [{symbol,name,sector,weight,accuracy}]}]
 
-    for i in range(len(weekly_dates) - 1):
-        rebal_date = weekly_dates[i]
-        next_date = weekly_dates[i + 1]
+    for i in range(len(rebal_dates) - 1):
+        rebal_date = rebal_dates[i]
+        next_date = rebal_dates[i + 1]
 
         # Find actual trading days in prices between rebal_date and next_date
         mask = (prices.index > rebal_date) & (prices.index <= next_date)
@@ -279,9 +288,11 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52):
         if len(values) < 2:
             return {}
         total_ret = (values[-1] / values[0] - 1) * 100
-        weekly_rets = np.diff(values) / values[:-1]
-        vol_ann = float(np.std(weekly_rets) * np.sqrt(52) * 100)
-        sharpe = float(np.mean(weekly_rets) / np.std(weekly_rets) * np.sqrt(52)) if np.std(weekly_rets) > 0 else 0
+        rets = np.diff(values) / values[:-1]
+        # Annualise based on number of periods per year
+        periods_per_year = {"D": 252, "W": 52, "M": 12, "3M": 4}.get(rebal_freq, 4)
+        vol_ann = float(np.std(rets) * np.sqrt(periods_per_year) * 100)
+        sharpe = float(np.mean(rets) / np.std(rets) * np.sqrt(periods_per_year)) if np.std(rets) > 0 else 0
         cummax = np.maximum.accumulate(values)
         drawdowns = (values - cummax) / cummax
         max_dd = float(np.min(drawdowns) * 100)
