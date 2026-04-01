@@ -324,21 +324,30 @@ class Predictor:
         df["Real_Close_diff"] = df["Real_Close"] - prev_real
         df["Predicted_Close_diff"] = df["Predicted_Close"] - prev_real
 
-        df["Correct_Direction"] = (
-            ((df["Real_Close_diff"] > 0) & (df["Predicted_Close_diff"] > 0)) |
-            ((df["Real_Close_diff"] < 0) & (df["Predicted_Close_diff"] < 0))
+        # Only mark direction where prev_real is available (skip oldest row)
+        has_prev = prev_real.notna()
+        df["Correct_Direction"] = None  # default to None (will serialize as null)
+        df.loc[has_prev, "Correct_Direction"] = (
+            ((df.loc[has_prev, "Real_Close_diff"] > 0) & (df.loc[has_prev, "Predicted_Close_diff"] > 0)) |
+            ((df.loc[has_prev, "Real_Close_diff"] < 0) & (df.loc[has_prev, "Predicted_Close_diff"] < 0))
         )
 
         # Close & Correct: direction right AND within 5% of real price
         pct_error = (abs(df["Predicted_Close"] - df["Real_Close"]) / df["Real_Close"])
-        df["Close_Correct"] = df["Correct_Direction"] & (pct_error <= 0.05)
+        df["Close_Correct"] = None
+        df.loc[has_prev, "Close_Correct"] = df.loc[has_prev, "Correct_Direction"].astype(bool) & (pct_error[has_prev] <= 0.05)
 
-        correct_direction = df["Correct_Direction"].sum()
-        correct_direction_perc = correct_direction / len(df) * 100 if len(df) > 0 else 0
-        close_correct = df["Close_Correct"].sum() / len(df) * 100 if len(df) > 0 else 0
-        mae = float(np.mean(np.abs(df["Real_Close"] - df["Predicted_Close"]))) if len(df) > 0 else 0
-        rmse = float(np.sqrt(np.mean((df["Real_Close"] - df["Predicted_Close"]) ** 2))) if len(df) > 0 else 0
-        mape = float(np.mean(np.abs((df["Real_Close"] - df["Predicted_Close"]) / df["Real_Close"])) * 100) if len(df) > 0 else 0
+        # Aggregate stats — only count rows with valid direction (matches JS logic)
+        valid_dir = df["Correct_Direction"].dropna()
+        total_dir = len(valid_dir)
+        correct_direction = valid_dir.astype(bool).sum()
+        correct_direction_perc = correct_direction / total_dir * 100 if total_dir > 0 else 0
+        close_correct = df["Close_Correct"].dropna().astype(bool).sum() / total_dir * 100 if total_dir > 0 else 0
+
+        valid = df.dropna(subset=["Real_Close", "Predicted_Close"])
+        mae = float(np.mean(np.abs(valid["Real_Close"] - valid["Predicted_Close"]))) if len(valid) > 0 else 0
+        rmse = float(np.sqrt(np.mean((valid["Real_Close"] - valid["Predicted_Close"]) ** 2))) if len(valid) > 0 else 0
+        mape = float(np.mean(np.abs((valid["Real_Close"] - valid["Predicted_Close"]) / valid["Real_Close"])) * 100) if len(valid) > 0 else 0
         return df, correct_direction_perc, mae, rmse, mape, close_correct
 
     def fetch_next_day_forecast(self):

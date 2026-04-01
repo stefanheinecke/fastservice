@@ -42,7 +42,7 @@ def api_summary_predictions():
         for symbol in symbols:
             try:
                 predictor = _get_predictor(symbol)
-                df, correct_direction_perc, mae, rmse, mape, close_correct = predictor.fetch_prediction_history(limit=30)
+                df, correct_direction_perc, mae, rmse, mape, close_correct = predictor.fetch_prediction_history()
                 forecast = predictor.fetch_next_day_forecast()
                 next_pred_date = None
                 next_pred_value = None
