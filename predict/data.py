@@ -129,19 +129,22 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
     # ------------------------------------------------------------------
     # 4. Build rebalance schedule based on chosen frequency
     # ------------------------------------------------------------------
+    cutoff = pd.Timestamp.today().normalize() - pd.DateOffset(weeks=lookback_weeks)
+    # All trading days in the lookback window
+    trading_days = prices.index[prices.index >= cutoff]
+    if len(trading_days) < 2:
+        return {"error": "Not enough data for backtest"}
+
     RESAMPLE_MAP = {"D": "B", "W": "W-FRI", "M": "ME", "3M": "QE"}
     rule = RESAMPLE_MAP.get(rebal_freq, "QE")
     if rule == "B":
-        # Business-day: just use every trading day in the price index
-        rebal_dates = prices.index
+        # Every trading day is a rebalance date
+        rebal_set = set(trading_days)
     else:
-        rebal_dates = prices.resample(rule).last().dropna(how="all").index
-    # Keep only the lookback window
-    cutoff = pd.Timestamp.today().normalize() - pd.DateOffset(weeks=lookback_weeks)
-    rebal_dates = rebal_dates[rebal_dates >= cutoff]
-
-    if len(rebal_dates) < 2:
-        return {"error": "Not enough data for backtest"}
+        rebal_idx = prices.loc[trading_days].resample(rule).last().dropna(how="all").index
+        rebal_set = set(rebal_idx)
+    # Always treat the first trading day as a rebalance date
+    rebal_set.add(trading_days[0])
 
     # ------------------------------------------------------------------
     # 5. At each rebalance date, rank stocks by rolling direction accuracy,
@@ -197,89 +200,63 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
         return [(s, meta[s]["market_cap"] / total_cap) for s in selected]
 
     # ------------------------------------------------------------------
-    # 6. Simulate period-by-period returns
+    # 6. Simulate daily returns, rebalancing only on rebalance dates
     # ------------------------------------------------------------------
     portfolio_value = 100.0
     smi_value = 100.0
+    holdings = []  # current [(symbol, weight)]
 
     series_dates = []
     series_portfolio = []
     series_smi = []
     compositions = []  # [{date, holdings: [{symbol,name,sector,weight,accuracy}]}]
 
-    for i in range(len(rebal_dates) - 1):
-        rebal_date = rebal_dates[i]
-        next_date = rebal_dates[i + 1]
-
-        # Find actual trading days in prices between rebal_date and next_date
-        mask = (prices.index > rebal_date) & (prices.index <= next_date)
-        period_prices = prices.loc[mask]
-        if period_prices.empty:
-            continue
-
-        # Select portfolio
-        holdings = _select_top5(rebal_date)
-        if not holdings:
-            # No valid stocks — hold cash
-            series_dates.append(next_date)
-            series_portfolio.append(portfolio_value)
-            # SMI still moves
-            if "^SSMI" in period_prices.columns:
-                smi_start = prices.loc[prices.index <= rebal_date, "^SSMI"].dropna().iloc[-1]
-                smi_end = period_prices["^SSMI"].dropna().iloc[-1]
-                smi_value *= smi_end / smi_start
-            series_smi.append(smi_value)
-            compositions.append({
-                "date": str(rebal_date.date()),
+    prev_day = None
+    for day in trading_days:
+        # --- Rebalance if this day is a rebalance date ---
+        if day in rebal_set:
+            holdings = _select_top5(day)
+            comp_entry = {
+                "date": str(day.date()),
                 "holdings": [],
-            })
-            continue
+            }
+            for sym, wt in holdings:
+                comp_entry["holdings"].append({
+                    "symbol": sym,
+                    "name": meta[sym]["name"],
+                    "sector": meta[sym]["sector"],
+                    "weight": round(wt * 100, 2),
+                    "accuracy": round(_direction_accuracy(sym, day) or 0, 2),
+                })
+            compositions.append(comp_entry)
 
-        # Record composition
-        comp_entry = {
-            "date": str(rebal_date.date()),
-            "holdings": [],
-        }
-        for sym, wt in holdings:
-            comp_entry["holdings"].append({
-                "symbol": sym,
-                "name": meta[sym]["name"],
-                "sector": meta[sym]["sector"],
-                "weight": round(wt * 100, 2),
-                "accuracy": round(_direction_accuracy(sym, rebal_date) or 0, 2),
-            })
-        compositions.append(comp_entry)
+        # --- Daily portfolio return based on current holdings ---
+        if prev_day is not None and holdings:
+            port_daily_ret = 0.0
+            for sym, wt in holdings:
+                if sym not in prices.columns:
+                    continue
+                p_prev = prices.loc[prices.index <= prev_day, sym].dropna()
+                p_curr = prices.loc[prices.index <= day, sym].dropna()
+                if p_prev.empty or p_curr.empty:
+                    continue
+                port_daily_ret += wt * (p_curr.iloc[-1] / p_prev.iloc[-1] - 1)
+            portfolio_value *= (1 + port_daily_ret)
 
-        # Portfolio return: weighted sum of individual stock returns
-        port_return = 0.0
-        for sym, wt in holdings:
-            if sym not in period_prices.columns:
-                continue
-            sym_prices = period_prices[sym].dropna()
-            if sym_prices.empty:
-                continue
-            sym_start = prices.loc[prices.index <= rebal_date, sym].dropna()
-            if sym_start.empty:
-                continue
-            ret = (sym_prices.iloc[-1] / sym_start.iloc[-1]) - 1
-            port_return += wt * ret
+        # --- Daily SMI return ---
+        if prev_day is not None and "^SSMI" in prices.columns:
+            smi_prev = prices.loc[prices.index <= prev_day, "^SSMI"].dropna()
+            smi_curr = prices.loc[prices.index <= day, "^SSMI"].dropna()
+            if not smi_prev.empty and not smi_curr.empty:
+                smi_value *= (smi_curr.iloc[-1] / smi_prev.iloc[-1])
 
-        portfolio_value *= (1 + port_return)
-
-        # SMI return
-        if "^SSMI" in period_prices.columns:
-            smi_prices = period_prices["^SSMI"].dropna()
-            smi_start_series = prices.loc[prices.index <= rebal_date, "^SSMI"].dropna()
-            if not smi_prices.empty and not smi_start_series.empty:
-                smi_ret = (smi_prices.iloc[-1] / smi_start_series.iloc[-1]) - 1
-                smi_value *= (1 + smi_ret)
-
-        series_dates.append(str(next_date.date()))
+        series_dates.append(str(day.date()))
         series_portfolio.append(round(portfolio_value, 4))
         series_smi.append(round(smi_value, 4))
+        prev_day = day
 
     # ------------------------------------------------------------------
-    # 7. Compute summary statistics
+    # 7. Compute summary statistics (always daily data)
     # ------------------------------------------------------------------
     port_arr = np.array(series_portfolio)
     smi_arr = np.array(series_smi)
@@ -289,10 +266,8 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
             return {}
         total_ret = (values[-1] / values[0] - 1) * 100
         rets = np.diff(values) / values[:-1]
-        # Annualise based on number of periods per year
-        periods_per_year = {"D": 252, "W": 52, "M": 12, "3M": 4}.get(rebal_freq, 4)
-        vol_ann = float(np.std(rets) * np.sqrt(periods_per_year) * 100)
-        sharpe = float(np.mean(rets) / np.std(rets) * np.sqrt(periods_per_year)) if np.std(rets) > 0 else 0
+        vol_ann = float(np.std(rets) * np.sqrt(252) * 100)
+        sharpe = float(np.mean(rets) / np.std(rets) * np.sqrt(252)) if np.std(rets) > 0 else 0
         cummax = np.maximum.accumulate(values)
         drawdowns = (values - cummax) / cummax
         max_dd = float(np.min(drawdowns) * 100)
