@@ -512,6 +512,11 @@ def flush_predictions():
     return _json_response({"message": f"Deleted {deleted} rows for {symbol}.", "deleted": deleted})
 
 
+@app.route("/logo.png")
+def logo():
+    return send_file("logo.png", mimetype="image/png")
+
+
 @app.route("/robots.txt")
 def robots():
     return send_file("robots.txt", mimetype="text/plain")

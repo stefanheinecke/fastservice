@@ -14,8 +14,8 @@
       --border: #2a2d3a;
       --text: #e6e6e6;
       --muted: #9ca3af;
-      --accent: #d4a017;
-      --accent-light: #e6b422;
+      --accent: #1b60ca;
+      --accent-light: #6490fa;
       --green: #22c55e;
       --red: #ef4444;
     }
@@ -28,9 +28,11 @@
     .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
 
     /* Header */
-    header { text-align: center; margin-bottom: 1.5rem; }
+    header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+    header img { height: 48px; width: auto; }
+    header .header-text { }
     header h1 { font-size: 1.75rem; font-weight: 700; color: var(--accent-light); }
-    header p  { color: var(--muted); margin-top: .35rem; font-size: .95rem; max-width: 640px; margin-inline: auto; }
+    header p  { color: var(--muted); margin-top: .35rem; font-size: .95rem; max-width: 640px; }
 
     /* Tabs */
     .tabs { display: flex; gap: .5rem; margin-bottom: 2rem; border-bottom: 1px solid var(--border); padding-bottom: .5rem; flex-wrap: wrap; }
@@ -76,7 +78,7 @@
     th, td { text-align: left; padding: .6rem .75rem; border-bottom: 1px solid var(--border); }
     th { color: var(--muted); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .4px; position: sticky; top: 0; background: var(--surface); }
     tr:last-child td { border-bottom: none; }
-    tbody tr:hover { background: rgba(212,160,23,.06); }
+    tbody tr:hover { background: rgba(100,144,250,.08); }
     .val-up { color: var(--green); }
     .val-down { color: var(--red); }
 
@@ -130,8 +132,11 @@
 <body>
 <div class="container">
   <header>
-    <h1>AI Next Day Price Prediction</h1>
-    <p>Forecast tomorrow's price with AI-driven insights powered by deep learning.</p>
+    <img src="/logo.png" alt="Logo" />
+    <div class="header-text">
+      <h1>AI Next Day Price Prediction</h1>
+      <p>Forecast tomorrow's price with AI-driven insights powered by deep learning.</p>
+    </div>
   </header>
 
   <!-- Tabs (restored and corrected order) -->
