@@ -215,7 +215,10 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
     for day in trading_days:
         # --- Rebalance if this day is a rebalance date ---
         if day in rebal_set:
-            holdings = _select_top5(day)
+            # Use prev_day (or day before first trading day) to avoid look-ahead bias:
+            # selection must be based on information available *before* this day.
+            selection_date = prev_day if prev_day is not None else day - pd.Timedelta(days=1)
+            holdings = _select_top5(selection_date)
             comp_entry = {
                 "date": str(day.date()),
                 "holdings": [],
@@ -226,7 +229,7 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
                     "name": meta[sym]["name"],
                     "sector": meta[sym]["sector"],
                     "weight": round(wt * 100, 2),
-                    "accuracy": round(_direction_accuracy(sym, day) or 0, 2),
+                    "accuracy": round(_direction_accuracy(sym, selection_date) or 0, 2),
                 })
             compositions.append(comp_entry)
 
