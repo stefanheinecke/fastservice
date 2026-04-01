@@ -221,7 +221,7 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
                 continue
             next_pred = future["predicted_close"].iloc[0]
             if next_pred <= last_real:
-                exclusion_reasons[sym] = "Predicted DOWN (pred {:.2f} <= real {:.2f})".format(next_pred, last_real)
+                exclusion_reasons[sym] = "Forecast DOWN: next-day pred {:.2f} <= prev close {:.2f}".format(next_pred, last_real)
                 continue
             scores.append((sym, acc))
         scores.sort(key=lambda x: x[1], reverse=True)

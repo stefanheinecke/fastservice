@@ -307,7 +307,7 @@ def api_robo_index_report():
             "In Portfolio", "Exclusion Reason",
             "Dir. Accuracy %",
             "Predicted Close", "Real Close", "Market Close",
-            "Pred vs Real Diff", "Pred Direction",
+            "Pred vs Real Diff", "Pred vs Actual",
             "Daily Stock Return", "Weighted Return",
         ]
         ws2.append(headers2)
@@ -345,8 +345,8 @@ def api_robo_index_report():
             # M: Pred vs Real Diff = Predicted - Real
             ws2.cell(row=row, column=13).value = f'=IF(AND(J{row}<>"",K{row}<>""),J{row}-K{row},"")'
             ws2.cell(row=row, column=13).number_format = num_fmt
-            # N: Pred Direction: UP if predicted > real close
-            ws2.cell(row=row, column=14).value = f'=IF(J{row}<>"",IF(J{row}>K{row},"UP","DOWN"),"")'
+            # N: Pred vs Actual: did model overshoot or undershoot the actual price?
+            ws2.cell(row=row, column=14).value = f'=IF(J{row}<>"",IF(J{row}>K{row},"ABOVE","BELOW"),"")'
             # O: Daily Stock Return = market_close_today / market_close_prev_day - 1
             if sym in prev_row_map:
                 pr = prev_row_map[sym]
