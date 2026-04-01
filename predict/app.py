@@ -99,6 +99,23 @@ def api_data_summary():
     return _json_response(rows)
 
 
+@app.route("/api/index-components/<index_name>")
+def api_index_components(index_name):
+    """Return ticker symbols for a known stock index."""
+    INDEX_COMPONENTS = {
+        "smi": [
+            "ABBN.SW", "ALC.SW", "CFR.SW", "GEBN.SW", "GIVN.SW",
+            "HOLN.SW", "KNIN.SW", "LONN.SW", "NESN.SW", "NOVN.SW",
+            "PGHN.SW", "ROG.SW", "SCMN.SW", "SDZ.SW", "SIKA.SW",
+            "SLHN.SW", "SOON.SW", "SREN.SW", "UBSG.SW", "ZURN.SW",
+        ],
+    }
+    name = index_name.lower()
+    if name not in INDEX_COMPONENTS:
+        return _json_response({"error": f"Unknown index: {index_name}"}), 404
+    return _json_response({"index": index_name, "tickers": INDEX_COMPONENTS[name]})
+
+
 @app.route("/api/predictions")
 def api_predictions():
     symbol = request.args.get("symbol", default=None, type=str)

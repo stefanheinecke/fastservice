@@ -233,6 +233,23 @@
       <div id="trigger-status" style="margin-top:.5rem"></div>
     </div>
 
+    <!-- Bulk Load -->
+    <div class="card">
+      <h2>Bulk Load &mdash; Preset Lists</h2>
+      <p style="color:var(--muted); margin-bottom:1rem">
+        Load all tickers from a preset list. Each ticker is processed sequentially (model training + storage).
+        This will take a while for large lists.
+      </p>
+      <div style="display:flex; gap:.75rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.25rem">
+        <button id="bulk-smi-btn" class="btn">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4.5h14.25M3 9h9.75M3 13.5h5.25m5.25 0H21m-3-4.5V21"/></svg>
+          Load SMI Components
+        </button>
+      </div>
+      <div id="bulk-progress" style="margin-top:.5rem; font-size:.88rem"></div>
+      <div id="bulk-log" style="margin-top:.75rem; max-height:300px; overflow-y:auto; font-size:.82rem; line-height:1.7"></div>
+    </div>
+
     <!-- Flush ticker data -->
     <div class="card">
       <h2>Flush Ticker Data</h2>
@@ -945,6 +962,77 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       triggerBtn.disabled = false;
       triggerBtn.innerHTML =
         '<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:18px;height:18px"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg> Generate &amp; Store';
+    }
+  });
+
+  /* ========== Bulk Load ========== */
+  const bulkSmiBtn   = document.getElementById("bulk-smi-btn");
+  const bulkProgress = document.getElementById("bulk-progress");
+  const bulkLog      = document.getElementById("bulk-log");
+
+  async function bulkLoad(tickers, label) {
+    bulkSmiBtn.disabled = true;
+    triggerBtn.disabled = true;
+    bulkLog.innerHTML = "";
+
+    // Determine which tickers are already loaded
+    const loaded = new Set(summaryData.map(r => r.symbol));
+    const toLoad = tickers.filter(t => !loaded.has(t));
+    const skipped = tickers.length - toLoad.length;
+
+    if (skipped > 0) {
+      bulkLog.innerHTML += `<div style="color:var(--muted)">\u2014 Skipping ${skipped} already-loaded ticker(s).</div>`;
+    }
+    if (toLoad.length === 0) {
+      bulkProgress.innerHTML = `<span style="color:var(--green)"><strong>${label}:</strong> all ${tickers.length} tickers already loaded.</span>`;
+      bulkSmiBtn.disabled = false;
+      triggerBtn.disabled = false;
+      return;
+    }
+
+    let ok = 0, fail = 0;
+    for (let i = 0; i < toLoad.length; i++) {
+      const sym = toLoad[i];
+      bulkProgress.innerHTML = `<span style="color:var(--accent-light)">${label}: processing ${i + 1} / ${toLoad.length} &mdash; <strong>${sym}</strong>&hellip;</span>`;
+      try {
+        const res = await fetch("/api/store_predictions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbol: sym })
+        });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+        const data = await res.json();
+        ok++;
+        bulkLog.innerHTML += `<div style="color:var(--green)">\u2714 ${sym} &mdash; ${data.message || "OK"}</div>`;
+      } catch (err) {
+        fail++;
+        bulkLog.innerHTML += `<div style="color:var(--red)">\u2716 ${sym} &mdash; ${err.message}</div>`;
+      }
+      bulkLog.scrollTop = bulkLog.scrollHeight;
+    }
+    bulkProgress.innerHTML = `<span style="color:var(--text)"><strong>${label} complete:</strong> ${ok} succeeded, ${fail} failed` + (skipped > 0 ? `, ${skipped} skipped (already loaded)` : '') + `.</span>`;
+    bulkSmiBtn.disabled = false;
+    triggerBtn.disabled = false;
+    await loadSummary();
+  }
+
+  bulkSmiBtn.addEventListener("click", async () => {
+    bulkSmiBtn.disabled = true;
+    bulkProgress.innerHTML = '<span style="color:var(--muted)">Fetching SMI components&hellip;</span>';
+    try {
+      const res = await fetch("/api/index-components/smi");
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const data = await res.json();
+      if (!data.tickers || data.tickers.length === 0) throw new Error("No tickers returned");
+      if (!confirm(`Load ${data.tickers.length} SMI components? Already-loaded tickers will be skipped.`)) {
+        bulkProgress.innerHTML = '';
+        bulkSmiBtn.disabled = false;
+        return;
+      }
+      await bulkLoad(data.tickers, "SMI bulk load");
+    } catch (err) {
+      bulkProgress.innerHTML = `<span style="color:var(--red)">Failed to fetch SMI components: ${err.message}</span>`;
+      bulkSmiBtn.disabled = false;
     }
   });
 
