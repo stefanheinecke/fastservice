@@ -184,12 +184,14 @@ def api_robo_index_report():
 
         # ================================================================
         # Sheet 1 — Portfolio (one row per day)
+        # Explains how portfolio value is calculated from weighted returns
         # ================================================================
         ws1 = wb.active
         ws1.title = "Portfolio"
         headers1 = [
             "Date", "Rebalance?",
-            "Portfolio Value", "Portfolio Daily Return",
+            "Portfolio Value", "Portfolio Value (Formula)",
+            "Portfolio Daily Return", "Sum Weighted Returns",
             "SMI Value", "SMI Daily Return",
             "Excess Return",
         ]
@@ -211,28 +213,67 @@ def api_robo_index_report():
                 date_port[dt] = d["portfolio_value"]
                 date_smi[dt] = d["smi_value"]
 
+        # We need to know the Holdings Detail row ranges per date so we can
+        # reference SUMPRODUCT of weighted returns.  Holdings Detail is Sheet 2
+        # with N_STOCKS rows per date (all SMI tickers).
+        n_stocks = len(SMI_TICKERS)
+        # Holdings Detail header is row 1, data starts row 2.
+        # Date i (0-based) occupies rows  (2 + i*n_stocks)  to  (1 + (i+1)*n_stocks)
+
         for i, dt in enumerate(seen_dates):
             row = i + 2  # 1-indexed, header is row 1
             ws1.cell(row=row, column=1, value=dt)
             ws1.cell(row=row, column=2, value="Yes" if date_rebal[dt] else "")
+
+            # C: Portfolio Value (computed by Python)
             ws1.cell(row=row, column=3, value=date_port[dt])
             ws1.cell(row=row, column=3).number_format = num_fmt
+
+            # D: Portfolio Value (Formula) = prev * (1 + sum weighted returns)
             if i == 0:
-                ws1.cell(row=row, column=4, value=0)
+                ws1.cell(row=row, column=4, value=date_port[dt])
             else:
-                # Formula: (C_row / C_prev) - 1
-                ws1.cell(row=row, column=4).value = f"=C{row}/C{row-1}-1"
-            ws1.cell(row=row, column=4).number_format = pct_fmt
-            ws1.cell(row=row, column=5, value=date_smi[dt])
-            ws1.cell(row=row, column=5).number_format = num_fmt
+                # F column has Sum Weighted Returns for this row
+                ws1.cell(row=row, column=4).value = f"=D{row-1}*(1+F{row})"
+            ws1.cell(row=row, column=4).number_format = num_fmt
+
+            # E: Portfolio Daily Return = C_row / C_prev - 1
+            if i == 0:
+                ws1.cell(row=row, column=5, value=0)
+            else:
+                ws1.cell(row=row, column=5).value = f"=C{row}/C{row-1}-1"
+            ws1.cell(row=row, column=5).number_format = pct_fmt
+
+            # F: Sum Weighted Returns — SUMPRODUCT from Holdings Detail
+            # Holdings Detail columns: F=Weight%, N=Daily Stock Return, G=In Portfolio
+            # We want: SUMPRODUCT((In_Portfolio="Yes") * Weight/100 * DailyReturn)
             if i == 0:
                 ws1.cell(row=row, column=6, value=0)
             else:
-                ws1.cell(row=row, column=6).value = f"=E{row}/E{row-1}-1"
+                hd_start = 2 + i * n_stocks
+                hd_end = 1 + (i + 1) * n_stocks
+                # Col G = In Portfolio, Col F = Weight%, Col N = Daily Stock Return
+                ws1.cell(row=row, column=6).value = (
+                    f"=SUMPRODUCT(('Holdings Detail'!G{hd_start}:G{hd_end}=\"Yes\")*"
+                    f"'Holdings Detail'!F{hd_start}:F{hd_end}/100*"
+                    f"'Holdings Detail'!N{hd_start}:N{hd_end})"
+                )
             ws1.cell(row=row, column=6).number_format = pct_fmt
-            # Excess return = Portfolio return - SMI return
-            ws1.cell(row=row, column=7).value = f"=D{row}-F{row}"
-            ws1.cell(row=row, column=7).number_format = pct_fmt
+
+            # G: SMI Value
+            ws1.cell(row=row, column=7, value=date_smi[dt])
+            ws1.cell(row=row, column=7).number_format = num_fmt
+
+            # H: SMI Daily Return
+            if i == 0:
+                ws1.cell(row=row, column=8, value=0)
+            else:
+                ws1.cell(row=row, column=8).value = f"=G{row}/G{row-1}-1"
+            ws1.cell(row=row, column=8).number_format = pct_fmt
+
+            # I: Excess Return = Portfolio ret - SMI ret
+            ws1.cell(row=row, column=9).value = f"=E{row}-H{row}"
+            ws1.cell(row=row, column=9).number_format = pct_fmt
 
             if date_rebal[dt]:
                 for c in range(1, len(headers1) + 1):
@@ -245,67 +286,80 @@ def api_robo_index_report():
         ws1.cell(row=summ_row, column=3).value = f"=C{last_data}/C2-1"
         ws1.cell(row=summ_row, column=3).number_format = pct_fmt
         ws1.cell(row=summ_row, column=3).font = Font(bold=True)
-        ws1.cell(row=summ_row, column=5).value = f"=E{last_data}/E2-1"
-        ws1.cell(row=summ_row, column=5).number_format = pct_fmt
-        ws1.cell(row=summ_row, column=5).font = Font(bold=True)
+        ws1.cell(row=summ_row, column=4).value = f"=D{last_data}/D2-1"
+        ws1.cell(row=summ_row, column=4).number_format = pct_fmt
+        ws1.cell(row=summ_row, column=4).font = Font(bold=True)
+        ws1.cell(row=summ_row, column=7).value = f"=G{last_data}/G2-1"
+        ws1.cell(row=summ_row, column=7).number_format = pct_fmt
+        ws1.cell(row=summ_row, column=7).font = Font(bold=True)
 
         for c in range(1, len(headers1) + 1):
-            ws1.column_dimensions[get_column_letter(c)].width = 18
+            ws1.column_dimensions[get_column_letter(c)].width = 20
 
         # ================================================================
-        # Sheet 2 — Holdings Detail (one row per stock per day)
+        # Sheet 2 — Holdings Detail (ALL SMI components, one row per stock per day)
         # ================================================================
         ws2 = wb.create_sheet("Holdings Detail")
+        sel_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")
         headers2 = [
             "Date", "Symbol", "Name", "Sector",
-            "Weight %", "Dir. Accuracy %",
+            "Rebalance?", "Weight %",
+            "In Portfolio",
+            "Dir. Accuracy %",
             "Predicted Close", "Real Close", "Market Close",
             "Pred vs Real Diff", "Pred Direction",
             "Daily Stock Return", "Weighted Return",
-            "Rebalance?",
         ]
         ws2.append(headers2)
         _style_header(ws2, len(headers2))
 
-        # Build a lookup: (date, symbol) -> previous day's market_close row number
-        # so we can write return formulas referencing the previous day
-        prev_row_map = {}  # (symbol) -> last row number written
+        # Build a lookup: symbol -> last row number written (for return formulas)
+        prev_row_map = {}
         for idx, d in enumerate(detail):
             row = idx + 2
             sym = d["symbol"]
+            in_port = d.get("in_portfolio", False)
             ws2.cell(row=row, column=1, value=d["date"])
             ws2.cell(row=row, column=2, value=sym)
             ws2.cell(row=row, column=3, value=d["name"])
             ws2.cell(row=row, column=4, value=d["sector"])
-            ws2.cell(row=row, column=5, value=d["weight_pct"])
-            ws2.cell(row=row, column=5).number_format = '0.00'
-            ws2.cell(row=row, column=6, value=d["direction_accuracy"])
+            ws2.cell(row=row, column=5, value="Yes" if d["is_rebalance_day"] else "")
+            ws2.cell(row=row, column=6, value=d["weight_pct"])
             ws2.cell(row=row, column=6).number_format = '0.00'
-            ws2.cell(row=row, column=7, value=d["predicted_close"])
-            ws2.cell(row=row, column=7).number_format = num_fmt
-            ws2.cell(row=row, column=8, value=d["real_close"])
-            ws2.cell(row=row, column=8).number_format = num_fmt
-            ws2.cell(row=row, column=9, value=d["market_close"])
+            # In Portfolio — shows YES for selected stocks
+            ws2.cell(row=row, column=7, value="Yes" if in_port else "")
+            ws2.cell(row=row, column=8, value=d["direction_accuracy"])
+            ws2.cell(row=row, column=8).number_format = '0.00'
+            ws2.cell(row=row, column=9, value=d["predicted_close"])
             ws2.cell(row=row, column=9).number_format = num_fmt
-            # Pred vs Real Diff = Predicted - Real (col G - col H)
-            ws2.cell(row=row, column=10).value = f'=IF(AND(G{row}<>"",H{row}<>""),G{row}-H{row},"")'
+            ws2.cell(row=row, column=10, value=d["real_close"])
             ws2.cell(row=row, column=10).number_format = num_fmt
-            # Pred Direction: UP if predicted > real of prev day
-            ws2.cell(row=row, column=11).value = f'=IF(G{row}<>"",IF(G{row}>H{row},"UP","DOWN"),"")'
-            # Daily Stock Return = market_close_today / market_close_prev_day - 1
+            ws2.cell(row=row, column=11, value=d["market_close"])
+            ws2.cell(row=row, column=11).number_format = num_fmt
+            # L: Pred vs Real Diff = Predicted - Real
+            ws2.cell(row=row, column=12).value = f'=IF(AND(I{row}<>"",J{row}<>""),I{row}-J{row},"")'
+            ws2.cell(row=row, column=12).number_format = num_fmt
+            # M: Pred Direction: UP if predicted > real close
+            ws2.cell(row=row, column=13).value = f'=IF(I{row}<>"",IF(I{row}>J{row},"UP","DOWN"),"")'
+            # N: Daily Stock Return = market_close_today / market_close_prev_day - 1
             if sym in prev_row_map:
                 pr = prev_row_map[sym]
-                ws2.cell(row=row, column=12).value = f"=IF(AND(I{row}<>\"\",I{pr}<>\"\"),I{row}/I{pr}-1,\"\")"
-                ws2.cell(row=row, column=12).number_format = pct_fmt
-                # Weighted Return = weight% / 100 * daily return
-                ws2.cell(row=row, column=13).value = f'=IF(L{row}<>"",E{row}/100*L{row},"")'
-                ws2.cell(row=row, column=13).number_format = pct_fmt
+                ws2.cell(row=row, column=14).value = f'=IF(AND(K{row}<>"",K{pr}<>""),K{row}/K{pr}-1,"")'
+                ws2.cell(row=row, column=14).number_format = pct_fmt
+                # O: Weighted Return = IF in portfolio, weight/100 * daily return
+                ws2.cell(row=row, column=15).value = (
+                    f'=IF(AND(G{row}="Yes",N{row}<>""),F{row}/100*N{row},"")'
+                )
+                ws2.cell(row=row, column=15).number_format = pct_fmt
             else:
-                ws2.cell(row=row, column=12, value="")
-                ws2.cell(row=row, column=13, value="")
-            ws2.cell(row=row, column=14, value="Yes" if d["is_rebalance_day"] else "")
+                ws2.cell(row=row, column=14, value="")
+                ws2.cell(row=row, column=15, value="")
 
-            if d["is_rebalance_day"]:
+            # Highlight selected stocks in green, rebalance days in yellow
+            if in_port:
+                for c in range(1, len(headers2) + 1):
+                    ws2.cell(row=row, column=c).fill = sel_fill
+            if d["is_rebalance_day"] and in_port:
                 for c in range(1, len(headers2) + 1):
                     ws2.cell(row=row, column=c).fill = rebal_fill
 

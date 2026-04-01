@@ -309,8 +309,10 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
         series_portfolio.append(round(portfolio_value, 4))
         series_smi.append(round(smi_value, 4))
 
-        # --- Collect daily detail for CSV report ---
-        for sym, wt in holdings:
+        # --- Collect daily detail for report (ALL SMI components) ---
+        held_syms = {sym for sym, _ in holdings}
+        held_weights = {sym: wt for sym, wt in holdings}
+        for sym in smi_tickers:
             real_close = None
             predicted_close = None
             if sym in pred_data:
@@ -324,12 +326,14 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
                 p = prices.loc[prices.index <= day, sym].dropna()
                 if not p.empty:
                     market_price = round(float(p.iloc[-1]), 2)
+            in_portfolio = sym in held_syms
             daily_detail.append({
                 "date": str(day.date()),
                 "symbol": sym,
                 "name": meta[sym]["name"],
                 "sector": meta[sym]["sector"],
-                "weight_pct": round(wt * 100, 2),
+                "in_portfolio": in_portfolio,
+                "weight_pct": round(held_weights.get(sym, 0) * 100, 2),
                 "direction_accuracy": current_accuracies.get(sym),
                 "predicted_close": predicted_close,
                 "real_close": real_close,
