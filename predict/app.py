@@ -6,7 +6,7 @@ import datetime
 import numpy as np
 import pandas as pd
 from flask import Flask, render_template, send_file, Response, request
-from data import Predictor, get_symbol_name
+from data import Predictor, get_symbol_name, robo_index_backtest
 from sqlalchemy import create_engine, text
 
 app = Flask(__name__)
@@ -114,6 +114,28 @@ def api_index_components(index_name):
     if name not in INDEX_COMPONENTS:
         return _json_response({"error": f"Unknown index: {index_name}"}), 404
     return _json_response({"index": index_name, "tickers": INDEX_COMPONENTS[name]})
+
+
+SMI_TICKERS = [
+    "ABBN.SW", "ALC.SW", "CFR.SW", "GEBN.SW", "GIVN.SW",
+    "HOLN.SW", "KNIN.SW", "LONN.SW", "NESN.SW", "NOVN.SW",
+    "PGHN.SW", "ROG.SW", "SCMN.SW", "SDZ.SW", "SIKA.SW",
+    "SLHN.SW", "SOON.SW", "SREN.SW", "UBSG.SW", "ZURN.SW",
+]
+
+
+@app.route("/api/robo-index")
+def api_robo_index():
+    """Run the Robo-Index backtest and return results."""
+    weeks = request.args.get("weeks", default=52, type=int)
+    weeks = min(max(weeks, 4), 156)  # clamp 4–156 weeks
+    try:
+        result = robo_index_backtest(DATABASE_URL, SMI_TICKERS, lookback_weeks=weeks)
+        return _json_response(result)
+    except Exception as e:
+        import traceback
+        print(f"Error in /api/robo-index: {e}\n{traceback.format_exc()}")
+        return _json_response({"error": str(e)}), 500
 
 
 @app.route("/api/predictions")

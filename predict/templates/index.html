@@ -138,6 +138,7 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="summary-predictions">Summary</button>
     <button class="tab-btn" data-tab="predictions">Predictions</button>
+    <button class="tab-btn" data-tab="robo-index">Robo-Index</button>
     <button class="tab-btn" data-tab="scenario">Investment Scenario</button>
     <button class="tab-btn" data-tab="load-data">Load Data</button>
     <button class="tab-btn" data-tab="api">API</button>
@@ -402,6 +403,110 @@
         not just how close the predictions are, but whether the model correctly anticipates
         upward or downward movements.
       </p>
+    </div>
+  </div>
+
+  <!-- ==================== Robo-Index ==================== -->
+  <div id="robo-index" class="tab-panel">
+    <div class="card">
+      <h2>Robo-Index &mdash; AI-Powered SMI Top 5</h2>
+      <p style="color:var(--muted); margin-bottom:1rem">
+        Every week, the 20 SMI stocks are ranked by their rolling directional prediction accuracy.
+        The top&nbsp;5 are selected with a maximum of <strong style="color:var(--text)">2&nbsp;stocks per sector</strong> for diversification.
+        Weights are proportional to <strong style="color:var(--text)">market capitalisation</strong>, rebalanced weekly.
+        This backtest compares the resulting Robo-Index against a passive SMI investment (both starting at 100).
+      </p>
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.25rem">
+        <div>
+          <label class="form-label" for="ri-weeks">Backtest Period</label>
+          <select id="ri-weeks" class="form-select">
+            <option value="13">3 Months</option>
+            <option value="26">6 Months</option>
+            <option value="52" selected>1 Year</option>
+          </select>
+        </div>
+        <button id="ri-run-btn" class="btn">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg>
+          Run Backtest
+        </button>
+      </div>
+    </div>
+
+    <div id="ri-loading" style="display:none; flex-direction:column; align-items:center; justify-content:center; gap:1rem; padding:4rem 0">
+      <div class="spinner"></div>
+      <span style="color:var(--muted)">Running backtest&hellip; Fetching prices and computing portfolio.</span>
+    </div>
+    <div id="ri-error" class="error-msg"></div>
+
+    <div id="ri-content" style="display:none">
+      <!-- Key metrics comparison -->
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.5rem">
+        <div class="metric-card">
+          <div class="label">Robo-Index Return</div>
+          <div class="value" id="ri-port-return"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">SMI Return</div>
+          <div class="value" id="ri-smi-return"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Robo-Index Volatility</div>
+          <div class="value" id="ri-port-vol"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">SMI Volatility</div>
+          <div class="value" id="ri-smi-vol"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Robo-Index Sharpe</div>
+          <div class="value" id="ri-port-sharpe"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">SMI Sharpe</div>
+          <div class="value" id="ri-smi-sharpe"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">Robo-Index Max DD</div>
+          <div class="value" id="ri-port-dd"></div>
+        </div>
+        <div class="metric-card">
+          <div class="label">SMI Max DD</div>
+          <div class="value" id="ri-smi-dd"></div>
+        </div>
+      </div>
+
+      <!-- Chart -->
+      <div class="card">
+        <h2>Performance Comparison (rebased to 100)</h2>
+        <div style="position:relative;height:400px">
+          <canvas id="ri-chart"></canvas>
+        </div>
+      </div>
+
+      <!-- Current composition -->
+      <div class="card">
+        <h2>Latest Portfolio Composition</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Name</th><th>Sector</th><th>Weight</th><th>Direction Accuracy</th></tr>
+            </thead>
+            <tbody id="ri-comp-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Rebalance history -->
+      <details class="card" style="cursor:pointer">
+        <summary style="font-weight:600; font-size:.95rem; color:var(--accent-light)">Rebalance History</summary>
+        <div id="ri-rebal-log" style="max-height:400px; overflow-y:auto; margin-top:1rem; font-size:.85rem; line-height:1.7"></div>
+      </details>
+
+      <div class="disclaimer">
+        This is a hypothetical backtest using historical data. It does not account for trading fees,
+        slippage, taxes, or market impact. Past performance does not guarantee future results.
+        This is not financial advice.
+      </div>
     </div>
   </div>
 
@@ -1253,6 +1358,119 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       btn.classList.add("active");
       displayData(Number(btn.dataset.days));
     });
+  });
+
+  /* ========== Robo-Index tab ========== */
+  const riWeeks   = document.getElementById("ri-weeks");
+  const riRunBtn  = document.getElementById("ri-run-btn");
+  const riLoading = document.getElementById("ri-loading");
+  const riError   = document.getElementById("ri-error");
+  const riContent = document.getElementById("ri-content");
+  let riChart     = null;
+
+  riRunBtn.addEventListener("click", async () => {
+    riRunBtn.disabled = true;
+    riLoading.style.display = "flex";
+    riError.style.display = "none";
+    riContent.style.display = "none";
+    try {
+      const res = await fetch("/api/robo-index?weeks=" + riWeeks.value);
+      if (!res.ok) throw new Error("Server responded " + res.status);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      // Stats
+      const ps = data.portfolio_stats || {};
+      const ss = data.smi_stats || {};
+      const fmt = (v, suffix) => v != null ? v + suffix : "\u2014";
+      document.getElementById("ri-port-return").textContent  = fmt(ps.total_return, "%");
+      document.getElementById("ri-smi-return").textContent   = fmt(ss.total_return, "%");
+      document.getElementById("ri-port-vol").textContent     = fmt(ps.annualized_vol, "%");
+      document.getElementById("ri-smi-vol").textContent      = fmt(ss.annualized_vol, "%");
+      document.getElementById("ri-port-sharpe").textContent  = ps.sharpe_ratio != null ? ps.sharpe_ratio.toFixed(2) : "\u2014";
+      document.getElementById("ri-smi-sharpe").textContent   = ss.sharpe_ratio != null ? ss.sharpe_ratio.toFixed(2) : "\u2014";
+      document.getElementById("ri-port-dd").textContent      = fmt(ps.max_drawdown, "%");
+      document.getElementById("ri-smi-dd").textContent       = fmt(ss.max_drawdown, "%");
+
+      // Color returns
+      const retEl = document.getElementById("ri-port-return");
+      retEl.style.color = (ps.total_return || 0) >= 0 ? "var(--green)" : "var(--red)";
+      const smiRetEl = document.getElementById("ri-smi-return");
+      smiRetEl.style.color = (ss.total_return || 0) >= 0 ? "var(--green)" : "var(--red)";
+
+      // Chart
+      const ctx = document.getElementById("ri-chart").getContext("2d");
+      if (riChart) riChart.destroy();
+      riChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: data.dates,
+          datasets: [
+            {
+              label: "Robo-Index",
+              data: data.portfolio,
+              borderColor: "#6366f1",
+              backgroundColor: "rgba(99,102,241,.1)",
+              borderWidth: 2, pointRadius: 0, fill: true, tension: .3,
+            },
+            {
+              label: "SMI",
+              data: data.smi,
+              borderColor: "#94a3b8",
+              backgroundColor: "rgba(148,163,184,.08)",
+              borderWidth: 2, pointRadius: 0, fill: true, tension: .3,
+            },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: "#e2e8f0" } } },
+          scales: {
+            x: { ticks: { color: "#94a3b8", maxTicksLimit: 12 }, grid: { color: "rgba(148,163,184,.12)" } },
+            y: { ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,.12)" } },
+          },
+        },
+      });
+
+      // Latest composition table
+      const compBody = document.getElementById("ri-comp-body");
+      compBody.innerHTML = "";
+      const latest = data.compositions && data.compositions.length > 0
+        ? data.compositions[data.compositions.length - 1]
+        : null;
+      if (latest && latest.holdings) {
+        latest.holdings.forEach(h => {
+          const tr = document.createElement("tr");
+          tr.innerHTML =
+            `<td>${h.name || h.symbol}</td>` +
+            `<td>${h.sector}</td>` +
+            `<td>${h.weight.toFixed(1)}%</td>` +
+            `<td>${h.accuracy.toFixed(1)}%</td>`;
+          compBody.appendChild(tr);
+        });
+      } else {
+        compBody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--muted)">No composition data.</td></tr>';
+      }
+
+      // Rebalance history log
+      const rebalLog = document.getElementById("ri-rebal-log");
+      rebalLog.innerHTML = "";
+      if (data.compositions) {
+        data.compositions.forEach(c => {
+          const names = c.holdings.map(h => `${h.name || h.symbol} (${h.weight.toFixed(1)}%)`).join(", ");
+          rebalLog.innerHTML += `<div style="margin-bottom:.4rem"><strong style="color:var(--text)">${c.date}</strong> &mdash; ${names || "Cash (no valid stocks)"}</div>`;
+        });
+      }
+
+      riLoading.style.display = "none";
+      riContent.style.display = "block";
+    } catch (err) {
+      riLoading.style.display = "none";
+      riError.style.display = "block";
+      riError.textContent = "Backtest failed: " + err.message;
+    } finally {
+      riRunBtn.disabled = false;
+    }
   });
 
   /* ========== Scenario tab ========== */

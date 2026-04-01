@@ -60,6 +60,251 @@ def get_symbol_name(symbol):
     return name
 
 
+_ticker_info_cache = {}
+
+def _get_ticker_info(symbol):
+    """Cached yfinance .info dict."""
+    if symbol not in _ticker_info_cache:
+        try:
+            _ticker_info_cache[symbol] = yf.Ticker(symbol).info
+        except Exception:
+            _ticker_info_cache[symbol] = {}
+    return _ticker_info_cache[symbol]
+
+
+def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52):
+    """
+    Backtest a weekly-rebalanced top-5 portfolio based on prediction accuracy,
+    sector-diversified, market-cap weighted, compared against the SMI index.
+
+    Returns a dict with portfolio time series, SMI time series, composition
+    history, and summary statistics.
+    """
+    engine = create_engine(database_url)
+
+    # ------------------------------------------------------------------
+    # 1. Gather sector + market-cap info for every SMI component
+    # ------------------------------------------------------------------
+    meta = {}
+    for sym in smi_tickers:
+        info = _get_ticker_info(sym)
+        meta[sym] = {
+            "name": info.get("shortName") or info.get("longName") or sym,
+            "sector": info.get("sector") or "Unknown",
+            "market_cap": info.get("marketCap") or 0,
+        }
+
+    # ------------------------------------------------------------------
+    # 2. Download 1 year + buffer of daily closes for all SMI stocks + ^SSMI
+    # ------------------------------------------------------------------
+    all_symbols = list(smi_tickers) + ["^SSMI"]
+    end_dt = pd.Timestamp.today().normalize()
+    start_dt = end_dt - pd.DateOffset(weeks=lookback_weeks + 4)
+
+    prices = yf.download(all_symbols, start=start_dt, end=end_dt, auto_adjust=True, progress=False)["Close"]
+    if isinstance(prices, pd.Series):
+        prices = prices.to_frame()
+    prices = prices.ffill().dropna(how="all")
+
+    # ------------------------------------------------------------------
+    # 3. Load prediction data from DB (real_close, predicted_close, date)
+    # ------------------------------------------------------------------
+    pred_data = {}
+    with engine.connect() as conn:
+        for sym in smi_tickers:
+            q = text("""
+                SELECT date, real_close, predicted_close
+                FROM predictions
+                WHERE symbol = :sym AND real_close IS NOT NULL
+                ORDER BY date
+            """)
+            df = pd.read_sql(q, conn, params={"sym": sym})
+            if not df.empty:
+                df["date"] = pd.to_datetime(df["date"])
+                pred_data[sym] = df.set_index("date")
+
+    # ------------------------------------------------------------------
+    # 4. Build weekly rebalance schedule
+    # ------------------------------------------------------------------
+    # Use Fridays from the price index
+    weekly_dates = prices.resample("W-FRI").last().dropna(how="all").index
+    # Keep only last `lookback_weeks` weeks
+    weekly_dates = weekly_dates[-lookback_weeks:] if len(weekly_dates) > lookback_weeks else weekly_dates
+
+    if len(weekly_dates) < 2:
+        return {"error": "Not enough data for backtest"}
+
+    # ------------------------------------------------------------------
+    # 5. At each rebalance date, rank stocks by rolling direction accuracy,
+    #    enforce sector diversification, weight by market cap
+    # ------------------------------------------------------------------
+    MAX_PER_SECTOR = 2
+    TOP_N = 5
+
+    def _direction_accuracy(sym, as_of_date, window=60):
+        """Compute directional accuracy for sym using prediction data up to as_of_date."""
+        if sym not in pred_data:
+            return None
+        df = pred_data[sym]
+        df_before = df.loc[df.index <= as_of_date].tail(window)
+        if len(df_before) < 10:
+            return None
+        prev_close = df_before["real_close"].shift(1)
+        real_dir = (df_before["real_close"] > prev_close)
+        pred_dir = (df_before["predicted_close"] > prev_close)
+        valid = prev_close.notna()
+        if valid.sum() < 10:
+            return None
+        return float((real_dir[valid] == pred_dir[valid]).mean() * 100)
+
+    def _select_top5(as_of_date):
+        """Return list of (symbol, weight) for the top-5 portfolio."""
+        scores = []
+        for sym in smi_tickers:
+            acc = _direction_accuracy(sym, as_of_date)
+            if acc is not None:
+                scores.append((sym, acc))
+        scores.sort(key=lambda x: x[1], reverse=True)
+
+        selected = []
+        sector_count = {}
+        for sym, acc in scores:
+            sec = meta[sym]["sector"]
+            if sector_count.get(sec, 0) >= MAX_PER_SECTOR:
+                continue
+            selected.append(sym)
+            sector_count[sec] = sector_count.get(sec, 0) + 1
+            if len(selected) >= TOP_N:
+                break
+
+        if not selected:
+            return []
+
+        # Market-cap weighting
+        total_cap = sum(meta[s]["market_cap"] for s in selected)
+        if total_cap == 0:
+            w = 1.0 / len(selected)
+            return [(s, w) for s in selected]
+        return [(s, meta[s]["market_cap"] / total_cap) for s in selected]
+
+    # ------------------------------------------------------------------
+    # 6. Simulate week-by-week returns
+    # ------------------------------------------------------------------
+    portfolio_value = 100.0
+    smi_value = 100.0
+
+    series_dates = []
+    series_portfolio = []
+    series_smi = []
+    compositions = []  # [{date, holdings: [{symbol,name,sector,weight,accuracy}]}]
+
+    for i in range(len(weekly_dates) - 1):
+        rebal_date = weekly_dates[i]
+        next_date = weekly_dates[i + 1]
+
+        # Find actual trading days in prices between rebal_date and next_date
+        mask = (prices.index > rebal_date) & (prices.index <= next_date)
+        period_prices = prices.loc[mask]
+        if period_prices.empty:
+            continue
+
+        # Select portfolio
+        holdings = _select_top5(rebal_date)
+        if not holdings:
+            # No valid stocks — hold cash
+            series_dates.append(next_date)
+            series_portfolio.append(portfolio_value)
+            # SMI still moves
+            if "^SSMI" in period_prices.columns:
+                smi_start = prices.loc[prices.index <= rebal_date, "^SSMI"].dropna().iloc[-1]
+                smi_end = period_prices["^SSMI"].dropna().iloc[-1]
+                smi_value *= smi_end / smi_start
+            series_smi.append(smi_value)
+            compositions.append({
+                "date": str(rebal_date.date()),
+                "holdings": [],
+            })
+            continue
+
+        # Record composition
+        comp_entry = {
+            "date": str(rebal_date.date()),
+            "holdings": [],
+        }
+        for sym, wt in holdings:
+            comp_entry["holdings"].append({
+                "symbol": sym,
+                "name": meta[sym]["name"],
+                "sector": meta[sym]["sector"],
+                "weight": round(wt * 100, 2),
+                "accuracy": round(_direction_accuracy(sym, rebal_date) or 0, 2),
+            })
+        compositions.append(comp_entry)
+
+        # Portfolio return: weighted sum of individual stock returns
+        port_return = 0.0
+        for sym, wt in holdings:
+            if sym not in period_prices.columns:
+                continue
+            sym_prices = period_prices[sym].dropna()
+            if sym_prices.empty:
+                continue
+            sym_start = prices.loc[prices.index <= rebal_date, sym].dropna()
+            if sym_start.empty:
+                continue
+            ret = (sym_prices.iloc[-1] / sym_start.iloc[-1]) - 1
+            port_return += wt * ret
+
+        portfolio_value *= (1 + port_return)
+
+        # SMI return
+        if "^SSMI" in period_prices.columns:
+            smi_prices = period_prices["^SSMI"].dropna()
+            smi_start_series = prices.loc[prices.index <= rebal_date, "^SSMI"].dropna()
+            if not smi_prices.empty and not smi_start_series.empty:
+                smi_ret = (smi_prices.iloc[-1] / smi_start_series.iloc[-1]) - 1
+                smi_value *= (1 + smi_ret)
+
+        series_dates.append(str(next_date.date()))
+        series_portfolio.append(round(portfolio_value, 4))
+        series_smi.append(round(smi_value, 4))
+
+    # ------------------------------------------------------------------
+    # 7. Compute summary statistics
+    # ------------------------------------------------------------------
+    port_arr = np.array(series_portfolio)
+    smi_arr = np.array(series_smi)
+
+    def _stats(values, label):
+        if len(values) < 2:
+            return {}
+        total_ret = (values[-1] / values[0] - 1) * 100
+        weekly_rets = np.diff(values) / values[:-1]
+        vol_ann = float(np.std(weekly_rets) * np.sqrt(52) * 100)
+        sharpe = float(np.mean(weekly_rets) / np.std(weekly_rets) * np.sqrt(52)) if np.std(weekly_rets) > 0 else 0
+        cummax = np.maximum.accumulate(values)
+        drawdowns = (values - cummax) / cummax
+        max_dd = float(np.min(drawdowns) * 100)
+        return {
+            "label": label,
+            "total_return": round(total_ret, 2),
+            "annualized_vol": round(vol_ann, 2),
+            "sharpe_ratio": round(sharpe, 2),
+            "max_drawdown": round(max_dd, 2),
+            "final_value": round(values[-1], 2),
+        }
+
+    return {
+        "dates": series_dates,
+        "portfolio": series_portfolio,
+        "smi": series_smi,
+        "compositions": compositions,
+        "portfolio_stats": _stats(port_arr, "Robo-Index"),
+        "smi_stats": _stats(smi_arr, "SMI"),
+        "meta": {s: {"name": m["name"], "sector": m["sector"]} for s, m in meta.items()},
+    }
+
+
 class Predictor:
     def _ensure_table(self):
         """Create the predictions and prediction_stats tables if they don't exist."""
