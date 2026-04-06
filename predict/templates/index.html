@@ -92,6 +92,15 @@
     .btn:hover { background: var(--accent-light); }
     .btn svg { width: 18px; height: 18px; }
 
+    .btn-sm {
+      display: inline-flex; align-items: center; gap: .3rem;
+      background: var(--surface); color: var(--accent-light); border: 1px solid var(--border);
+      padding: .25rem .6rem; border-radius: 6px; font-size: .75rem;
+      font-weight: 500; cursor: pointer; transition: all .2s; text-decoration: none;
+      white-space: nowrap;
+    }
+    .btn-sm:hover { background: var(--accent); color: #111; border-color: var(--accent); }
+
     /* Error */
     .error-msg {
       background: rgba(239,68,68,.1); border: 1px solid var(--red);
@@ -141,10 +150,8 @@
 
   <!-- Tabs (restored and corrected order) -->
   <div class="tabs">
-    <button class="tab-btn active" data-tab="robo-index">Robo-Index</button>
-    <button class="tab-btn" data-tab="summary-predictions">Overview</button>
-    <button class="tab-btn" data-tab="predictions">Predictions</button>
-    <button class="tab-btn" data-tab="scenario">Investment Scenario</button>
+    <button class="tab-btn active" data-tab="summary-predictions">Prediction Overview</button>
+    <button class="tab-btn" data-tab="robo-index">Robo-Index</button>
     <button class="tab-btn" data-tab="load-data">Load Data</button>
     <button class="tab-btn" data-tab="api">API</button>
     <button class="tab-btn" data-tab="about">About</button>
@@ -172,6 +179,7 @@
                 <th>MAE (%)</th>
                 <th>RMSE (%)</th>
                 <th>MAPE (%)</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody id="summary-predictions-body"></tbody>
@@ -282,6 +290,9 @@
   <div id="predictions" class="tab-panel">
     <!-- Ticker + time range selector bar -->
     <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.5rem">
+      <button class="btn" onclick="navigateToTab('summary-predictions')" style="background:var(--surface);color:var(--accent-light);border:1px solid var(--border);font-size:.82rem;padding:.4rem .8rem">
+        &larr; Back to Overview
+      </button>
       <div>
         <label class="form-label" for="pred-ticker">Ticker</label>
         <select id="pred-ticker" class="form-select">
@@ -543,6 +554,9 @@
       </p>
 
       <div style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end; margin-bottom:1.25rem">
+        <button class="btn" onclick="navigateToTab('summary-predictions')" style="background:var(--surface);color:var(--accent-light);border:1px solid var(--border);font-size:.82rem;padding:.4rem .8rem">
+          &larr; Back to Overview
+        </button>
         <div>
           <label class="form-label" for="sc-ticker">Ticker</label>
           <select id="sc-ticker" class="form-select">
@@ -776,6 +790,31 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
 </div>
 
 <script>
+  /* ========== Navigation helpers ========== */
+  function navigateToTab(tabId) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById(tabId);
+    if (panel) panel.classList.add('active');
+    // Highlight matching tab button if it exists in the menu
+    const btn = document.querySelector(`.tab-btn[data-tab="${tabId}"]`);
+    if (btn) btn.classList.add('active');
+    if (tabId === 'summary-predictions') loadSummaryPredictions();
+  }
+
+  function openPrediction(symbol) {
+    navigateToTab('predictions');
+    const sel = document.getElementById('pred-ticker');
+    if (sel) { sel.value = symbol; }
+    loadPredictions(symbol);
+  }
+
+  function openScenario(symbol) {
+    navigateToTab('scenario');
+    const sel = document.getElementById('sc-ticker');
+    if (sel) { sel.value = symbol; }
+  }
+
   /* ========== Tabs ========== */
   document.querySelectorAll(".tab-btn").forEach(btn => {
     btn.addEventListener("click", function() {
@@ -900,6 +939,7 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
           if (row.symbol && row.name) nameMap[row.symbol] = row.name;
           const tr = document.createElement("tr");
           const displayName = row.name || row.symbol || "&mdash;";
+          const sym = row.symbol || "";
           tr.innerHTML =
             `<td>${displayName}</td>` +
             `<td>${row.last_real_close != null ? Number(row.last_real_close).toFixed(2) : "&mdash;"}</td>` +
@@ -907,7 +947,8 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
             `<td style="${dirColor(row.correct_direction)}">${row.correct_direction != null ? row.correct_direction.toFixed(2) + "%" : "&mdash;"}</td>` +
             `<td style="${maeColor(row.mae_pct)}">${row.mae_pct != null ? row.mae_pct.toFixed(2) + "%" : "&mdash;"}</td>` +
             `<td style="${rmseColor(row.rmse_pct)}">${row.rmse_pct != null ? row.rmse_pct.toFixed(2) + "%" : "&mdash;"}</td>` +
-            `<td style="${mapeColor(row.mape)}">${row.mape != null ? row.mape.toFixed(2) + "%" : "&mdash;"}</td>`;
+            `<td style="${mapeColor(row.mape)}">${row.mape != null ? row.mape.toFixed(2) + "%" : "&mdash;"}</td>` +
+            `<td style="white-space:nowrap"><button class="btn-sm" onclick="openPrediction('${sym}')">Prediction</button> <button class="btn-sm" onclick="openScenario('${sym}')">Scenario</button></td>`;
           tbody.appendChild(tr);
         });
       }
