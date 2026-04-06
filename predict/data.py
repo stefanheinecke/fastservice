@@ -4,7 +4,6 @@ import yfinance as yf
 import ta
 import pandas as pd
 import numpy as np
-import tensorflow as tf
 import os
 import random
 from sklearn.model_selection import train_test_split
@@ -13,26 +12,25 @@ from sklearn.metrics import mean_squared_error
 from sqlalchemy import create_engine, text
 import matplotlib.pyplot as plt
 
-# from tensorflow.keras.models import Sequential
-# from tensorflow.keras.layers import Dense, Dropout, BatchNormalization, Bidirectional, LSTM, Reshape
-# from tensorflow.keras.callbacks import EarlyStopping
-# from tensorflow.keras.initializers import GlorotUniform
-
 # Fix randomness
 SEED = 42
 random.seed(SEED)
 np.random.seed(SEED)
-tf.random.set_seed(SEED)
 os.environ['PYTHONHASHSEED'] = str(SEED)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-# Limit TensorFlow memory growth
-try:
-    gpus = tf.config.list_physical_devices('GPU')
-    for gpu in gpus:
-        tf.config.experimental.set_memory_growth(gpu, True)
-except Exception:
-    pass
+
+def _lazy_tf():
+    """Import and configure TensorFlow on first call. Returns the tf module."""
+    import tensorflow as tf
+    tf.random.set_seed(SEED)
+    try:
+        gpus = tf.config.list_physical_devices('GPU')
+        for gpu in gpus:
+            tf.config.experimental.set_memory_growth(gpu, True)
+    except Exception:
+        pass
+    return tf
 
 # Load data
 def load_data(symbol: str):
@@ -227,6 +225,8 @@ def train_and_predict(symbol, cutoff_date, predict_days=63, engine=None):
     X_train_scaled = X_scaler.transform(
         X_train.reshape(-1, num_features)
     ).reshape(n_train, window_size, num_features)
+
+    tf = _lazy_tf()
 
     # Custom loss
     def direction_aware_loss(y_true, y_pred):
@@ -756,6 +756,8 @@ class Predictor:
         split_idx = int(len(X_scaled) * 0.8)
         X_train, X_test = X_scaled[:split_idx], X_scaled[split_idx:]
         y_train, y_test = y[:split_idx], y[split_idx:]
+
+        tf = _lazy_tf()
 
         # Custom loss: Huber + directional BCE
         def direction_aware_loss(y_true, y_pred):
