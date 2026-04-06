@@ -141,9 +141,9 @@
 
   <!-- Tabs (restored and corrected order) -->
   <div class="tabs">
-    <button class="tab-btn active" data-tab="summary-predictions">Summary</button>
+    <button class="tab-btn active" data-tab="robo-index">Robo-Index</button>
+    <button class="tab-btn" data-tab="summary-predictions">Overview</button>
     <button class="tab-btn" data-tab="predictions">Predictions</button>
-    <button class="tab-btn" data-tab="robo-index">Robo-Index</button>
     <button class="tab-btn" data-tab="scenario">Investment Scenario</button>
     <button class="tab-btn" data-tab="load-data">Load Data</button>
     <button class="tab-btn" data-tab="api">API</button>
@@ -160,7 +160,7 @@
     </div>
     <div id="summary-content" style="display:none">
       <div class="card">
-        <h2 id="summary-heading">Summary of Next-Day Predictions</h2>
+        <h2 id="summary-heading">Overview of Next-Day Predictions</h2>
         <div class="table-wrap" style="max-height:480px; overflow-y:auto">
           <table>
             <thead>
@@ -842,9 +842,9 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
       });
       const heading = document.getElementById("summary-heading");
       if (latestDate) {
-        heading.textContent = `Summary of Next-Day Predictions (${latestDate})`;
+        heading.textContent = `Overview of Next-Day Predictions (${latestDate})`;
       } else {
-        heading.textContent = 'Summary of Next-Day Predictions';
+        heading.textContent = 'Overview of Next-Day Predictions';
       }
       // Update header with the latest real close date across all symbols
       let latestRealCloseDate = null;
