@@ -132,8 +132,10 @@ def api_robo_index():
     rebal = request.args.get("rebal", default="3M", type=str)
     if rebal not in ("D", "W", "M", "3M"):
         rebal = "3M"
+    wf = request.args.get("wf", default="0", type=str) == "1"
     try:
-        result = robo_index_backtest(DATABASE_URL, SMI_TICKERS, lookback_weeks=weeks, rebal_freq=rebal)
+        result = robo_index_backtest(DATABASE_URL, SMI_TICKERS, lookback_weeks=weeks,
+                                     rebal_freq=rebal, walk_forward=wf)
         # Strip daily_detail from JSON response (only used for CSV download)
         json_result = {k: v for k, v in result.items() if k != "daily_detail"}
         return _json_response(json_result)
@@ -155,8 +157,10 @@ def api_robo_index_report():
     rebal = request.args.get("rebal", default="3M", type=str)
     if rebal not in ("D", "W", "M", "3M"):
         rebal = "3M"
+    wf = request.args.get("wf", default="0", type=str) == "1"
     try:
-        result = robo_index_backtest(DATABASE_URL, SMI_TICKERS, lookback_weeks=weeks, rebal_freq=rebal)
+        result = robo_index_backtest(DATABASE_URL, SMI_TICKERS, lookback_weeks=weeks,
+                                     rebal_freq=rebal, walk_forward=wf)
         if "error" in result:
             return _json_response({"error": result["error"]}), 400
 
