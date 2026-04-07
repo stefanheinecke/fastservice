@@ -450,13 +450,6 @@
             <option value="3M" selected>Quarterly</option>
           </select>
         </div>
-        <div id="ri-wf-wrap" style="display:flex; align-items:center; gap:.4rem; padding-top:1.3rem">
-          <input type="checkbox" id="ri-wf" style="accent-color:var(--accent)">
-          <label for="ri-wf" style="font-size:.85rem; color:var(--muted); cursor:pointer"
-                 title="Retrain LSTM models at each quarterly rebalance using only data available up to that date. Eliminates look-ahead bias but takes longer (uses caching).">
-            Walk-Forward Retraining
-          </label>
-        </div>
         <button id="ri-run-btn" class="btn">
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg>
           Run Backtest
@@ -539,6 +532,10 @@
       </details>
 
       <div class="disclaimer">
+        <strong>Bias-free accuracy:</strong> Only predictions that were stored <em>before</em>
+        the outcome date are used for directional accuracy scoring. Historical predictions
+        without a timestamp are excluded.  As the daily prediction job runs over time, more
+        bias-free data accumulates and backtest accuracy becomes increasingly reliable.<br><br>
         This is a hypothetical backtest using historical data. It does not account for trading fees,
         slippage, taxes, or market impact. Past performance does not guarantee future results.
         This is not financial advice.
@@ -1429,8 +1426,6 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
   /* ========== Robo-Index tab ========== */
   const riWeeks   = document.getElementById("ri-weeks");
   const riRebal   = document.getElementById("ri-rebal");
-  const riWfCheck = document.getElementById("ri-wf");
-  const riWfWrap  = document.getElementById("ri-wf-wrap");
   const riRunBtn  = document.getElementById("ri-run-btn");
   const riCsvBtn  = document.getElementById("ri-csv-btn");
   const riLoading = document.getElementById("ri-loading");
@@ -1438,27 +1433,14 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
   const riContent = document.getElementById("ri-content");
   let riChart     = null;
 
-  // Show walk-forward checkbox only when quarterly is selected
-  function updateWfVisibility() {
-    riWfWrap.style.display = riRebal.value === "3M" ? "flex" : "none";
-    if (riRebal.value !== "3M") riWfCheck.checked = false;
-  }
-  riRebal.addEventListener("change", updateWfVisibility);
-  updateWfVisibility();
-
   riRunBtn.addEventListener("click", async () => {
     riRunBtn.disabled = true;
     riLoading.style.display = "flex";
     riError.style.display = "none";
     riContent.style.display = "none";
-    const wfParam = riWfCheck.checked ? "&wf=1" : "";
-    if (riWfCheck.checked) {
-      riLoading.querySelector("span").textContent = "Running walk-forward backtest\u2026 Training models at each rebalance (cached results load instantly).";
-    } else {
-      riLoading.querySelector("span").textContent = "Running backtest\u2026 Fetching prices and computing portfolio.";
-    }
+    riLoading.querySelector("span").textContent = "Running backtest\u2026 Fetching prices and computing portfolio.";
     try {
-      const res = await fetch("/api/robo-index?weeks=" + riWeeks.value + "&rebal=" + riRebal.value + wfParam);
+      const res = await fetch("/api/robo-index?weeks=" + riWeeks.value + "&rebal=" + riRebal.value);
       if (!res.ok) throw new Error("Server responded " + res.status);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -1560,8 +1542,7 @@ console.log(`Next day: $${data.next_day.predicted_close}`);</pre>
   });
 
   riCsvBtn.addEventListener("click", () => {
-    const wfDl = riWfCheck.checked ? "&wf=1" : "";
-    window.location.href = "/api/robo-index/report?weeks=" + riWeeks.value + "&rebal=" + riRebal.value + wfDl;
+    window.location.href = "/api/robo-index/report?weeks=" + riWeeks.value + "&rebal=" + riRebal.value;
   });
 
   /* ========== Scenario tab ========== */

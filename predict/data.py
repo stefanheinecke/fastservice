@@ -70,243 +70,22 @@ def _get_ticker_info(symbol):
     return _ticker_info_cache[symbol]
 
 
-def _ensure_walkforward_table(engine):
-    """Create the walk-forward cache table if it doesn't exist."""
-    ddl = text("""
-        CREATE TABLE IF NOT EXISTS walkforward_cache (
-            id SERIAL PRIMARY KEY,
-            symbol TEXT NOT NULL,
-            cutoff_date DATE NOT NULL,
-            predict_days INTEGER NOT NULL,
-            predictions_json TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(symbol, cutoff_date, predict_days)
-        )
-    """)
-    with engine.begin() as conn:
-        conn.execute(ddl)
 
 
-def _get_cached_predictions(engine, symbol, cutoff_date, predict_days):
-    """Return cached predictions as a DataFrame, or None if not cached."""
-    q = text("""
-        SELECT predictions_json FROM walkforward_cache
-        WHERE symbol = :sym AND cutoff_date = :cd AND predict_days = :pd
-    """)
-    with engine.connect() as conn:
-        row = conn.execute(q, {"sym": symbol, "cd": cutoff_date, "pd": predict_days}).fetchone()
-    if row is None:
-        return None
-    import json
-    data = json.loads(row[0])
-    df = pd.DataFrame(data)
-    if not df.empty:
-        df["date"] = pd.to_datetime(df["date"])
-        df = df.set_index("date")
-    return df
 
 
-def _store_cached_predictions(engine, symbol, cutoff_date, predict_days, pred_df):
-    """Store predictions in the walk-forward cache."""
-    import json
-    records = pred_df.reset_index().copy()
-    records["date"] = records["date"].astype(str)
-    json_str = json.dumps(records[["date", "real_close", "predicted_close"]].to_dict(orient="records"))
-    q = text("""
-        INSERT INTO walkforward_cache (symbol, cutoff_date, predict_days, predictions_json)
-        VALUES (:sym, :cd, :pd, :json)
-        ON CONFLICT (symbol, cutoff_date, predict_days) DO UPDATE SET predictions_json = :json
-    """)
-    with engine.begin() as conn:
-        conn.execute(q, {"sym": symbol, "cd": cutoff_date, "pd": predict_days, "json": json_str})
 
-
-def train_and_predict(symbol, cutoff_date, predict_days=63, engine=None):
-    """
-    Train an LSTM on data up to cutoff_date and return a DataFrame with
-    predicted_close and real_close for ALL available dates (training + future).
-
-    Uses the walk-forward cache if available.
-
-    Returns: DataFrame with columns [real_close, predicted_close], indexed by date.
-    """
-    # Check cache first
-    if engine is not None:
-        _ensure_walkforward_table(engine)
-        cached = _get_cached_predictions(engine, symbol, cutoff_date, predict_days)
-        if cached is not None:
-            print(f"  [cache hit] {symbol} @ {cutoff_date}")
-            return cached
-
-    print(f"  [training] {symbol} @ {cutoff_date} ...")
-
-    # Download data up to cutoff_date + predict_days buffer for real_close comparison
-    ticker = yf.Ticker(symbol)
-    end_download = pd.Timestamp(cutoff_date) + pd.Timedelta(days=int(predict_days * 2))
-    raw = ticker.history(start="2015-01-01", end=end_download.strftime("%Y-%m-%d"),
-                         interval="1d")[["Open", "High", "Low", "Close", "Volume"]]
-    if raw.empty or len(raw) < 120:
-        print(f"  [skip] {symbol}: not enough data")
-        return pd.DataFrame(columns=["real_close", "predicted_close"])
-
-    raw = ta.add_all_ta_features(
-        raw, open="Open", high="High", low="Low", close="Close", volume="Volume",
-        fillna=True).dropna()
-
-    raw.index = pd.to_datetime(raw.index).tz_localize(None).normalize()
-
-    # Split into train (up to cutoff) and eval (after cutoff)
-    cutoff_ts = pd.Timestamp(cutoff_date)
-
-    # Feature engineering (same as create_predictions)
-    df = raw.copy()
-    df["return_1d"] = df["Close"].pct_change()
-    df["return_5d"] = df["Close"].pct_change(5)
-    df["return_10d"] = df["Close"].pct_change(10)
-    df["return_20d"] = df["Close"].pct_change(20)
-    df["rolling_vol_10"] = df["return_1d"].rolling(10).std()
-    df["rolling_vol_20"] = df["return_1d"].rolling(20).std()
-    df["close_to_ema"] = df["Close"] / df["trend_ema_fast"] - 1
-    df["ma5"] = df["Close"].rolling(5).mean()
-    df["ma20"] = df["Close"].rolling(20).mean()
-    df["ma_cross"] = df["ma5"] / df["ma20"] - 1
-    df["high_low_range"] = (df["High"] - df["Low"]) / df["Close"]
-    df["close_position"] = (df["Close"] - df["Low"]) / (df["High"] - df["Low"] + 1e-8)
-    df.dropna(inplace=True)
-
-    feature_cols = [
-        "Open", "High", "Low", "Close", "Volume",
-        "momentum_rsi", "trend_macd", "momentum_stoch",
-        "volatility_bbm", "volatility_bbh", "volatility_bbl",
-        "volatility_atr", "trend_ema_fast", "volume_obv",
-        "return_1d", "return_5d", "return_10d", "return_20d",
-        "rolling_vol_10", "rolling_vol_20", "close_to_ema",
-        "ma_cross", "high_low_range", "close_position",
-    ]
-    close_prices = df["Close"].values.copy()
-    dates_all = df.index.copy()
-    df_feat = df[feature_cols]
-    num_features = len(feature_cols)
-
-    # Target: log returns
-    log_returns = np.log(close_prices[1:] / close_prices[:-1])
-
-    window_size = 60
-    features, labels = [], []
-    for i in range(window_size, len(df_feat)):
-        features.append(df_feat.iloc[i - window_size:i].values)
-        labels.append(log_returns[i - 1])
-
-    X = np.array(features)
-    del features
-    y = np.array(labels).reshape(-1, 1)
-    del labels
-
-    # Dates corresponding to each sample
-    sample_dates = dates_all[window_size:]
-
-    # Split: train on data up to cutoff_date only
-    train_mask = sample_dates <= cutoff_ts
-    X_train = X[train_mask]
-    y_train = y[train_mask]
-
-    if len(X_train) < 60:
-        print(f"  [skip] {symbol}: not enough training samples ({len(X_train)})")
-        del X, y
-        return pd.DataFrame(columns=["real_close", "predicted_close"])
-
-    # Scale features
-    X_scaler = StandardScaler()
-    n_train = X_train.shape[0]
-    X_flat = X_train.reshape(-1, num_features)
-    X_scaler.fit(X_flat)
-    del X_flat
-
-    X_train_scaled = X_scaler.transform(
-        X_train.reshape(-1, num_features)
-    ).reshape(n_train, window_size, num_features)
-
-    tf = _lazy_tf()
-
-    # Custom loss
-    def direction_aware_loss(y_true, y_pred):
-        huber = tf.reduce_mean(tf.keras.losses.huber(y_true, y_pred, delta=0.01))
-        pred_dir = tf.sigmoid(y_pred * 100.0)
-        true_dir = tf.cast(y_true > 0, tf.float32)
-        dir_bce = tf.reduce_mean(tf.keras.losses.binary_crossentropy(true_dir, pred_dir))
-        return huber + 3.0 * dir_bce
-
-    model = tf.keras.models.Sequential([
-        tf.keras.layers.LSTM(64, return_sequences=True,
-                             input_shape=(window_size, num_features)),
-        tf.keras.layers.Dropout(0.3),
-        tf.keras.layers.LSTM(32, return_sequences=False),
-        tf.keras.layers.Dropout(0.3),
-        tf.keras.layers.Dense(32, activation="relu"),
-        tf.keras.layers.Dense(1)
-    ])
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=5e-4),
-        loss=direction_aware_loss,
-        metrics=["mae"],
-    )
-
-    early_stop = tf.keras.callbacks.EarlyStopping(
-        monitor="val_loss", patience=10, restore_best_weights=True
-    )
-    reduce_lr = tf.keras.callbacks.ReduceLROnPlateau(
-        monitor="val_loss", factor=0.5, patience=4, min_lr=1e-6
-    )
-
-    model.fit(
-        X_train_scaled, y_train,
-        epochs=150,
-        batch_size=64,
-        validation_split=0.15,
-        callbacks=[early_stop, reduce_lr],
-        verbose=0,
-    )
-
-    # Predict on ALL samples (train + eval) for full history
-    n_all = X.shape[0]
-    X_all_scaled = X_scaler.transform(
-        X.reshape(-1, num_features)
-    ).reshape(n_all, window_size, num_features)
-    pred_returns = model.predict(X_all_scaled, batch_size=128, verbose=0).flatten()
-
-    # Clean up
-    del model, X_scaler, X_train_scaled, X_all_scaled, X, y
-    tf.keras.backend.clear_session()
-    gc.collect()
-
-    # Convert log returns to prices
-    base_prices = close_prices[window_size - 1:-1]
-    pred_prices = base_prices * np.exp(pred_returns)
-    real_prices = close_prices[window_size:]
-
-    result_df = pd.DataFrame({
-        "real_close": real_prices,
-        "predicted_close": pred_prices,
-    }, index=sample_dates)
-    result_df.index.name = "date"
-
-    # Store in cache
-    if engine is not None:
-        _store_cached_predictions(engine, symbol, cutoff_date, predict_days, result_df)
-
-    return result_df
-
-
-def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq="3M",
-                        walk_forward=False):
+def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq="3M"):
     """
     Backtest a top-5 portfolio based on prediction accuracy,
     sector-diversified, market-cap weighted, compared against the SMI index.
 
     rebal_freq: rebalancing frequency — "D" (daily), "W" (weekly),
                 "M" (monthly), "3M" (quarterly, default)
-    walk_forward: if True, retrain LSTM models at each rebalance date
-                  using only data available up to that date (quarterly only).
+
+    Only predictions with a created_at timestamp are used for directional
+    accuracy scoring.  This eliminates look-ahead bias because only
+    predictions that were genuinely stored *before* the outcome date count.
 
     Returns a dict with portfolio time series, SMI time series, composition
     history, and summary statistics.
@@ -339,31 +118,30 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
     prices = prices.ffill().dropna(how="all")
 
     # ------------------------------------------------------------------
-    # 3. Load prediction data from DB (real_close, predicted_close, date)
-    #    Skip when walk_forward=True — fresh models will be trained at each rebalance.
+    # 3. Load prediction data from DB (real_close, predicted_close, date, created_at)
+    #    Only predictions that have a created_at timestamp are used for
+    #    directional accuracy scoring (bias-free subset).
     # ------------------------------------------------------------------
     pred_data = {}
-    if not walk_forward:
-        with engine.connect() as conn:
-            for sym in smi_tickers:
-                q = text("""
-                    SELECT date, real_close, predicted_close
-                    FROM predictions
-                    WHERE symbol = :sym AND real_close IS NOT NULL
-                    ORDER BY date
-                """)
-                df = pd.read_sql(q, conn, params={"sym": sym})
-                if not df.empty:
-                    df["date"] = pd.to_datetime(df["date"])
-                    pred_data[sym] = df.set_index("date")
+    with engine.connect() as conn:
+        for sym in smi_tickers:
+            q = text("""
+                SELECT date, real_close, predicted_close, created_at
+                FROM predictions
+                WHERE symbol = :sym AND real_close IS NOT NULL
+                ORDER BY date
+            """)
+            df = pd.read_sql(q, conn, params={"sym": sym})
+            if not df.empty:
+                df["date"] = pd.to_datetime(df["date"])
+                df["created_at"] = pd.to_datetime(df["created_at"])
+                pred_data[sym] = df.set_index("date")
 
     # 3b. Load the latest predicted_close per symbol (including forecasts)
     #     so we can check if the model predicts UP for the next day.
-    #     Skip when walk_forward — predictions come from retrained models.
     latest_pred = {}
-    if not walk_forward:
-        with engine.connect() as conn:
-            for sym in smi_tickers:
+    with engine.connect() as conn:
+        for sym in smi_tickers:
                 q_real = text("""
                     SELECT real_close FROM predictions
                     WHERE symbol = :sym AND real_close IS NOT NULL
@@ -410,11 +188,21 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
     TOP_N = 5
 
     def _direction_accuracy(sym, as_of_date, window=60):
-        """Compute directional accuracy for sym using prediction data up to as_of_date."""
+        """Compute directional accuracy for sym using only bias-free predictions.
+
+        A prediction is bias-free if it has a created_at timestamp that is
+        <= the prediction date (i.e. the model made the prediction before
+        the outcome was known).  Rows without created_at are excluded.
+        """
         if sym not in pred_data:
             return None
         df = pred_data[sym]
-        df_before = df.loc[df.index <= as_of_date].tail(window)
+        df_before = df.loc[df.index <= as_of_date]
+        # Keep only bias-free rows: created_at is set and <= the prediction date
+        if "created_at" in df_before.columns:
+            df_before = df_before[df_before["created_at"].notna() &
+                                  (df_before["created_at"] <= df_before.index)]
+        df_before = df_before.tail(window)
         if len(df_before) < 10:
             return None
         prev_close = df_before["real_close"].shift(1)
@@ -504,17 +292,6 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
         is_rebal = day in rebal_set
         if is_rebal:
             selection_date = prev_day if prev_day is not None else day - pd.Timedelta(days=1)
-
-            # Walk-forward: retrain all models using data only up to selection_date
-            if walk_forward:
-                cutoff_str = str(selection_date.date())
-                print(f"\n=== Walk-forward rebalance {day.date()} (cutoff {cutoff_str}) ===")
-                for sym in smi_tickers:
-                    wf_df = train_and_predict(sym, cutoff_str, predict_days=63, engine=engine)
-                    if not wf_df.empty:
-                        pred_data[sym] = wf_df
-                    elif sym in pred_data:
-                        del pred_data[sym]
 
             holdings, all_acc, excl_reasons = _select_top5(selection_date)
             current_accuracies = {sym: (round(a, 2) if a is not None else None)
@@ -643,7 +420,8 @@ class Predictor:
                 date DATE NOT NULL,
                 predicted_close DOUBLE PRECISION,
                 real_close DOUBLE PRECISION,
-                real_open DOUBLE PRECISION
+                real_open DOUBLE PRECISION,
+                created_at DATE
             )
         """)
         ddl_stats = text("""
@@ -663,6 +441,13 @@ class Predictor:
         with self.engine.begin() as conn:
             conn.execute(ddl_predictions)
             conn.execute(ddl_stats)
+            # Migration: add created_at column to existing tables
+            conn.execute(text(f"""
+                DO $$ BEGIN
+                    ALTER TABLE {self.TABLE_NAME} ADD COLUMN created_at DATE;
+                EXCEPTION WHEN duplicate_column THEN NULL;
+                END $$
+            """))
     def __init__(self, database_url, symbol):
         self.engine = create_engine(database_url)
         self.symbol = symbol
@@ -907,6 +692,7 @@ class Predictor:
                 "Date": "date",
                 "Predicted_Close": "predicted_close",
             })
+            records["created_at"] = pd.Timestamp.today().date()
             records.to_sql(
                 self.TABLE_NAME, self.engine, if_exists="append", index=False,
             )
