@@ -188,20 +188,23 @@ def robo_index_backtest(database_url, smi_tickers, lookback_weeks=52, rebal_freq
     TOP_N = 5
 
     def _direction_accuracy(sym, as_of_date, window=60):
-        """Compute directional accuracy for sym using only bias-free predictions.
+        """Compute directional accuracy for sym using prediction data up to as_of_date.
 
-        A prediction is bias-free if it has a created_at timestamp that is
-        <= the prediction date (i.e. the model made the prediction before
-        the outcome was known).  Rows without created_at are excluded.
+        Prefers bias-free predictions (created_at <= prediction date) when at
+        least 10 such rows exist.  Falls back to all predictions otherwise so
+        that the backtest still works before enough genuine daily forecasts
+        have accumulated.
         """
         if sym not in pred_data:
             return None
         df = pred_data[sym]
         df_before = df.loc[df.index <= as_of_date]
-        # Keep only bias-free rows: created_at is set and <= the prediction date
+        # Try bias-free subset first
         if "created_at" in df_before.columns:
-            df_before = df_before[df_before["created_at"].notna() &
+            bias_free = df_before[df_before["created_at"].notna() &
                                   (df_before["created_at"] <= df_before.index)]
+            if len(bias_free) >= 10:
+                df_before = bias_free
         df_before = df_before.tail(window)
         if len(df_before) < 10:
             return None
@@ -447,6 +450,12 @@ class Predictor:
                     ALTER TABLE {self.TABLE_NAME} ADD COLUMN created_at DATE;
                 EXCEPTION WHEN duplicate_column THEN NULL;
                 END $$
+            """))
+            # Backfill: set created_at for rows that still have NULL
+            conn.execute(text(f"""
+                UPDATE {self.TABLE_NAME}
+                SET created_at = CURRENT_DATE
+                WHERE created_at IS NULL
             """))
     def __init__(self, database_url, symbol):
         self.engine = create_engine(database_url)
